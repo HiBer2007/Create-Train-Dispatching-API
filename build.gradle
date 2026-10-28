@@ -1,0 +1,65 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.141'
+}
+
+group = project.maven_group
+version = project.mod_version
+base {
+    archivesName = project.archives_name
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    withSourcesJar()
+}
+
+neoForge {
+    version = project.neo_version
+
+    // 目前没有任何 mixin / 访问转换；本项目只提供接口，不含实现。
+    // 实现方（调度内核所在的模组）负责所有注入。
+}
+
+repositories {
+    mavenCentral()
+    maven { name = 'CreateMod'; url = 'https://maven.createmod.net' }
+}
+
+// 本 API **刻意不依赖 Create**：所有类型只用到 Minecraft / NeoForge 的公开类。
+// 这样第三方内核不必随 Create 版本更新而重编译。
+// 如果你需要在实现模块里用 Create，请在那个模块里单独声明依赖。
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+jar {
+    manifest {
+        attributes(
+            'Specification-Title'     : project.mod_name,
+            'Specification-Vendor'    : project.mod_authors,
+            'Specification-Version'   : '1',
+            'Implementation-Title'    : project.name,
+            'Implementation-Version'  : project.version,
+            'Implementation-Vendor'   : project.mod_authors
+        )
+    }
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            from components.java
+            artifactId = project.archives_name
+        }
+    }
+    repositories {
+        maven {
+            name = 'local'
+            url = layout.buildDirectory.dir('repo')
+        }
+    }
+}

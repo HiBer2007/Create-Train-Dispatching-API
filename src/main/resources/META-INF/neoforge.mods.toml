@@ -1,0 +1,30 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "LGPL-3.0-or-later"
+
+[[mods]]
+modId = "ctdapi"
+version = "${file.jarVersion}"
+displayName = "Create Train Dispatching API"
+authors = "HiBer_2007"
+description = '''
+A pluggable signal and dispatching API for Create's railway system.
+
+This jar contains interfaces only. It does not change any behaviour on its own —
+a mod that consumes it provides the implementation (the dispatching kernel) and
+performs all of the necessary integration.
+'''
+
+[[dependencies.ctdapi]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.ctdapi]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,1.22)"
+ordering = "NONE"
+side = "BOTH"
