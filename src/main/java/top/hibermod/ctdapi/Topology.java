@@ -3,9 +3,12 @@ package top.hibermod.ctdapi;
 import java.util.Collection;
 import java.util.List;
 
+import top.hibermod.ctdapi.device.Devices;
 import top.hibermod.ctdapi.signal.Aspect;
 import top.hibermod.ctdapi.signal.SignalRegistries;
+import top.hibermod.ctdapi.signal.SignalSystem;
 import top.hibermod.ctdapi.signal.SignalType;
+import top.hibermod.ctdapi.timetable.Service;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -132,6 +135,12 @@ public interface Topology {
 
     // ── 信号规格注册表的只读视图 ────────────────────────────────────────
 
+    /** 全部已注册的信号制度。同一条铁路可以同时存在多套。 */
+    Collection<SignalSystem> signalSystems();
+
+    /** 按 id 取制度；未注册返回 {@code null}。 */
+    SignalSystem signalSystem(ResourceLocation id);
+
     /** 全部已注册的信号机型。 */
     Collection<SignalType> signalTypes();
 
@@ -143,6 +152,35 @@ public interface Topology {
 
     /** 按 id 取语义；未注册返回 {@code null}。 */
     Aspect aspect(ResourceLocation id);
+
+    // ── 设备 ────────────────────────────────────────────────────────────
+
+    /**
+     * 世界里全部设备实例（地面 + 车载）。
+     *
+     * <p>信号机不在此列——它有独立模型（{@link SignalSite}）。这里是道岔转辙机、
+     * 计轴、轨道电路、应答器、平交道、站台门、车载 ATP/ATO 等。
+     */
+    Collection<Devices.DeviceSite> devices();
+
+    /** 指定类型的设备实例。 */
+    Collection<Devices.DeviceSite> devicesOf(ResourceLocation typeId);
+
+    /** 挂在某列车上的车载设备。 */
+    Collection<Devices.DeviceSite> devicesOfTrain(java.util.UUID trainId);
+
+    // ── 交路 ────────────────────────────────────────────────────────────
+
+    /**
+     * 全部已注册的交路。
+     *
+     * <p>每条交路绑定一套信号制度（{@link Service#signalSystemId()}）——
+     * 这就是「用哪套信号系统由时刻表决定」的落点。
+     */
+    Collection<Service> services();
+
+    /** 按 id 取交路；未注册返回 {@code null}。 */
+    Service service(ResourceLocation id);
 
     /**
      * 一个岔口。

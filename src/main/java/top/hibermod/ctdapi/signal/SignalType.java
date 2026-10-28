@@ -35,6 +35,7 @@ import net.minecraft.resources.ResourceLocation;
  */
 public record SignalType(
     ResourceLocation id,
+    ResourceLocation systemId,
     Component displayName,
     List<LampSpec> lampLayout,
     Map<ResourceLocation, List<LampDisplay>> aspectMap,
@@ -91,6 +92,7 @@ public record SignalType(
     /** 链式构造器。 */
     public static final class Builder {
         private final ResourceLocation id;
+        private ResourceLocation systemId;
         private Component displayName;
         private final List<LampSpec> lamps = new ArrayList<>();
         private final Map<ResourceLocation, List<LampDisplay>> aspectMap = new LinkedHashMap<>();
@@ -99,6 +101,16 @@ public record SignalType(
 
         private Builder(ResourceLocation id) {
             this.id = id;
+        }
+
+        /** 归属的信号制度。未设置时归入默认系统。 */
+        public Builder system(ResourceLocation systemId) {
+            this.systemId = systemId;
+            return this;
+        }
+
+        public Builder system(SignalSystem system) {
+            return system(system.id());
         }
 
         public Builder name(Component name) {
@@ -153,7 +165,10 @@ public record SignalType(
             if (lamps.isEmpty()) {
                 throw new IllegalStateException("SignalType " + id + " needs at least one lamp");
             }
-            return new SignalType(id, displayName, lamps, aspectMap, semantics, priority);
+            if (systemId == null) {
+                systemId = SignalRegistries.DEFAULT_SYSTEM_ID;
+            }
+            return new SignalType(id, systemId, displayName, lamps, aspectMap, semantics, priority);
         }
     }
 

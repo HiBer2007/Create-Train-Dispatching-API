@@ -134,4 +134,17 @@ public final class Command {
      */
     public record SwitchCommand(Rail.NodeId node, Topology.SwitchPosition position,
                                 Rail.EdgeId branch, long holder) {}
+
+    /**
+     * 对一台**普通设备**的指令（非信号机、非道岔）。
+     *
+     * <p>用于地面设备（计轴、应答器、平交道、站台门……）与车载设备（ATP/ATO/电台）。
+     * {@code payload} 是**开放 schema**：内容由对应 {@code DeviceType} 的实现自行解释，
+     * 宿主只校验「设备存在、在线、可命令」然后原样转交。
+     *
+     * @param deviceId 目标设备实例
+     * @param payload  指令内容
+     * @param holder   发起者（进路 id 或内核标识），用于审计与冲突检测
+     */
+    public record DeviceCommand(java.util.UUID deviceId, net.minecraft.nbt.CompoundTag payload, long holder) {}
 }

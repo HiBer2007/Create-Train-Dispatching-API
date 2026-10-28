@@ -2,14 +2,16 @@ package top.hibermod.ctdapi.signal;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 信号系统的**开放注册表**：灯色、语义（Aspect）、机型（SignalType）。
+ * 信号系统的**开放注册表**：灯色、语义（Aspect）、机型（SignalType）、制度（SignalSystem）。
  *
  * <p>注册时机：mod 构造期或 {@code FMLCommonSetupEvent}。宿主在
  * {@code FMLLoadCompleteEvent} 前后调用 {@link #freeze()}，此后禁止注册（早失败优于晚出错）。
@@ -20,17 +22,23 @@ import net.minecraft.resources.ResourceLocation;
  *
  * <ul>
  *   <li>id 重复 → 直接抛异常（不静默覆盖）</li>
- *   <li>机型引用了未注册的 Aspect → {@link #freeze()} 时报错并列出全部问题</li>
+ *   <li>机型引用了未注册的 Aspect、或系统引用了未注册的机型 → {@link #freeze()} 时报错并列出全部问题</li>
  *   <li>灯位越界 → 构造 {@link SignalType} 时就抛</li>
+ *   <li>某套制度没有任何「停车」语义 → {@link #freeze()} 时报错（无法停车的信号制度是危险的）</li>
  * </ul>
  */
 public final class SignalRegistries {
 
     private SignalRegistries() {}
 
+    /** 默认制度的 id。未显式指定归属的机型会落到这里。 */
+    public static final ResourceLocation DEFAULT_SYSTEM_ID =
+        ResourceLocation.fromNamespaceAndPath("ctdapi", "mainline_4");
+
     private static final Map<ResourceLocation, LampColor> LAMPS = new LinkedHashMap<>();
     private static final Map<ResourceLocation, Aspect> ASPECTS = new LinkedHashMap<>();
     private static final Map<ResourceLocation, SignalType> TYPES = new LinkedHashMap<>();
+    private static final Map<ResourceLocation, SignalSystem> SYSTEMS = new LinkedHashMap<>();
 
     private static boolean frozen;
     private static boolean bootstrapped;
@@ -61,6 +69,14 @@ public final class SignalRegistries {
         return type;
     }
 
+    public static SignalSystem registerSystem(SignalSystem system) {
+        checkOpen();
+        if (SYSTEMS.putIfAbsent(system.id(), system) != null) {
+            throw new IllegalStateException("Duplicate signal system id: " + system.id());
+        }
+        return system;
+    }
+
     // ── 查询 ──────────────────────────────────────────────────────────────
 
     public static Optional<LampColor> lamp(ResourceLocation id) {
@@ -75,14 +91,41 @@ public final class SignalRegistries {
         return Optional.ofNullable(TYPES.get(id));
     }
 
+    public static Optional<SignalSystem> system(ResourceLocation id) {
+        return Optional.ofNullable(SYSTEMS.get(id));
+    }
+
     /**
-     * 取机型，找不到时回退到 {@link #fallbackType()}。
+     * 取机型，找不到时回退到全局默认机型。
      *
      * <p>宿主在读取存档里的未知机型时用它，避免旧档案直接报废。
      */
     public static SignalType typeOrFallback(ResourceLocation id) {
         SignalType t = TYPES.get(id);
         return t != null ? t : fallbackType();
+    }
+
+    /** 某台信号机属于哪套制度（按机型反查）。 */
+    public static Optional<SignalSystem> systemOfType(ResourceLocation typeId) {
+        SignalType t = TYPES.get(typeId);
+        return t == null ? Optional.empty() : system(t.systemId());
+    }
+
+    /** 某套制度下的全部机型。 */
+    public static Collection<SignalType> typesOf(ResourceLocation systemId) {
+        return TYPES.values().stream()
+            .filter(t -> t.systemId().equals(systemId))
+            .toList();
+    }
+
+    /** 某套制度下的全部语义。 */
+    public static Collection<Aspect> aspectsOf(ResourceLocation systemId) {
+        SignalSystem s = SYSTEMS.get(systemId);
+        if (s == null) return List.of();
+        return s.aspectIds().stream()
+            .map(ASPECTS::get)
+            .filter(Objects::nonNull)
+            .toList();
     }
 
     public static Collection<LampColor> lamps() {
@@ -97,9 +140,18 @@ public final class SignalRegistries {
         return TYPES.values();
     }
 
-    /** 未知机型时的回退（三显示区间通过信号机）。 */
+    public static Collection<SignalSystem> systems() {
+        return SYSTEMS.values();
+    }
+
+    /** 未知机型时的全局回退。 */
     public static SignalType fallbackType() {
-        return Builtin.BLOCK3;
+        SignalSystem s = SYSTEMS.get(DEFAULT_SYSTEM_ID);
+        if (s != null) {
+            SignalType t = TYPES.get(s.fallbackType());
+            if (t != null) return t;
+        }
+        return TYPES.values().iterator().next();
     }
 
     // ── 生命周期 ──────────────────────────────────────────────────────────
@@ -117,16 +169,47 @@ public final class SignalRegistries {
         if (frozen) return;
 
         StringBuilder problems = new StringBuilder();
+
         for (SignalType type : TYPES.values()) {
             for (ResourceLocation aspectId : type.aspectMap().keySet()) {
                 if (!ASPECTS.containsKey(aspectId)) {
-                    problems.append("\n  - ").append(type.id()).append(" references unknown aspect ").append(aspectId);
+                    problems.append("\n  - ").append(type.id())
+                        .append(" references unknown aspect ").append(aspectId);
                 }
             }
-            if (!type.aspectMap().containsKey(Builtin.STOP.id())) {
-                problems.append("\n  - ").append(type.id()).append(" does not map the STOP aspect");
+            if (!SYSTEMS.containsKey(type.systemId())) {
+                problems.append("\n  - ").append(type.id())
+                    .append(" belongs to unknown system ").append(type.systemId());
             }
         }
+
+        for (SignalSystem system : SYSTEMS.values()) {
+            for (ResourceLocation typeId : system.typeIds()) {
+                SignalType t = TYPES.get(typeId);
+                if (t == null) {
+                    problems.append("\n  - ").append(system.id())
+                        .append(" lists unknown type ").append(typeId);
+                } else if (!t.systemId().equals(system.id())) {
+                    problems.append("\n  - type ").append(typeId).append(" says system ")
+                        .append(t.systemId()).append(" but is listed by ").append(system.id());
+                }
+            }
+            for (ResourceLocation aspectId : system.aspectIds()) {
+                if (!ASPECTS.containsKey(aspectId)) {
+                    problems.append("\n  - ").append(system.id())
+                        .append(" lists unknown aspect ").append(aspectId);
+                }
+            }
+            boolean hasStop = system.aspectIds().stream()
+                .map(ASPECTS::get)
+                .filter(Objects::nonNull)
+                .anyMatch(a -> a.category() == Aspect.Category.STOP);
+            if (!hasStop) {
+                problems.append("\n  - ").append(system.id())
+                    .append(" has no STOP-category aspect (a signal system that cannot stop trains)");
+            }
+        }
+
         if (problems.length() > 0) {
             throw new IllegalStateException("Signal registry validation failed:" + problems);
         }
@@ -138,6 +221,7 @@ public final class SignalRegistries {
         LAMPS.clear();
         ASPECTS.clear();
         TYPES.clear();
+        SYSTEMS.clear();
         frozen = false;
         bootstrapped = false;
     }
@@ -151,9 +235,9 @@ public final class SignalRegistries {
     // ── 内置内容 ──────────────────────────────────────────────────────────
 
     /**
-     * 注册内置的灯色、语义与几种常见机型。宿主应在 mod init 期调用一次。
+     * 注册内置的灯色、语义与两套制度。宿主应在 mod init 期调用一次。
      *
-     * <p>内置内容只是**起点**——任何铁路制度都可以在此基础上注册自己的机型。
+     * <p>内置内容只是**起点**——任何铁路制度都可以在此基础上注册自己的系统。
      */
     public static void bootstrap() {
         if (bootstrapped) return;
@@ -175,16 +259,14 @@ public final class SignalRegistries {
         registerAspect(Builtin.CALL_ON);
         registerAspect(Builtin.DARK);
 
-        registerType(Builtin.BLOCK3);
-        registerType(Builtin.BLOCK4);
-        registerType(Builtin.HOME4);
-        registerType(Builtin.STARTING4);
-        registerType(Builtin.SHUNT_2);
-        registerType(Builtin.DISTANT);
-        registerType(Builtin.ROUTE_INDICATOR);
+        for (SignalType t : Builtin.allTypes()) {
+            registerType(t);
+        }
+        registerSystem(Builtin.MAINLINE_4);
+        registerSystem(Builtin.YARD);
     }
 
-    /** 内置语义与机型的定义。 */
+    /** 内置语义、机型与制度的定义。 */
     public static final class Builtin {
 
         private Builtin() {}
@@ -221,6 +303,7 @@ public final class SignalRegistries {
 
         /** 三显示区间通过信号机：红 / 黄 / 绿。 */
         public static final SignalType BLOCK3 = SignalType.builder(id("block_3"))
+            .system(DEFAULT_SYSTEM_ID)
             .name(Component.translatable("signal_type.ctdapi.block_3"))
             .lamp(LampColor.RED).lamp(LampColor.YELLOW).lamp(LampColor.GREEN)
             .expresses(STOP.id(), 0)
@@ -231,6 +314,7 @@ public final class SignalRegistries {
 
         /** 四显示区间通过信号机：红 / 黄 / 黄 / 绿（双黄 = 预告两区间后关闭）。 */
         public static final SignalType BLOCK4 = SignalType.builder(id("block_4"))
+            .system(DEFAULT_SYSTEM_ID)
             .name(Component.translatable("signal_type.ctdapi.block_4"))
             .lamp(LampColor.RED).lamp(LampColor.YELLOW).lamp(LampColor.YELLOW).lamp(LampColor.GREEN)
             .expresses(STOP.id(), 0)
@@ -242,6 +326,7 @@ public final class SignalRegistries {
 
         /** 四显示进站信号机。 */
         public static final SignalType HOME4 = SignalType.builder(id("home_4"))
+            .system(DEFAULT_SYSTEM_ID)
             .name(Component.translatable("signal_type.ctdapi.home_4"))
             .lamp(LampColor.RED).lamp(LampColor.YELLOW).lamp(LampColor.YELLOW).lamp(LampColor.GREEN)
             .expresses(STOP.id(), 0)
@@ -255,6 +340,7 @@ public final class SignalRegistries {
 
         /** 四显示出站信号机。 */
         public static final SignalType STARTING4 = SignalType.builder(id("starting_4"))
+            .system(DEFAULT_SYSTEM_ID)
             .name(Component.translatable("signal_type.ctdapi.starting_4"))
             .lamp(LampColor.RED).lamp(LampColor.YELLOW).lamp(LampColor.YELLOW).lamp(LampColor.GREEN)
             .expresses(STOP.id(), 0)
@@ -265,21 +351,13 @@ public final class SignalRegistries {
             .priority(10)
             .build();
 
-        /** 调车信号机：白（允许调车）/ 蓝（禁止调车）。 */
-        public static final SignalType SHUNT_2 = SignalType.builder(id("shunt_2"))
-            .name(Component.translatable("signal_type.ctdapi.shunt_2"))
-            .lamp(LampColor.WHITE).lamp(LampColor.BLUE)
-            .expresses(SHUNT.id(), 0)
-            .expresses(STOP.id(), 1)
-            .semantics(SignalSemantics.SHUNT)
-            .build();
-
         /**
          * 预告 / 复示信号机：黄 / 绿。
          *
          * <p><b>不是停车点</b>——它只影响减速曲线。当成边界会让列车提前停死。
          */
         public static final SignalType DISTANT = SignalType.builder(id("distant"))
+            .system(DEFAULT_SYSTEM_ID)
             .name(Component.translatable("signal_type.ctdapi.distant"))
             .lamp(LampColor.YELLOW).lamp(LampColor.GREEN)
             .expresses(CAUTION.id(), 0)
@@ -287,13 +365,48 @@ public final class SignalRegistries {
             .semantics(SignalSemantics.DISTANT)
             .build();
 
+        /** 调车信号机：白（允许调车）/ 蓝（禁止调车）。 */
+        public static final SignalType SHUNT_2 = SignalType.builder(id("shunt_2"))
+            .system(id("yard"))
+            .name(Component.translatable("signal_type.ctdapi.shunt_2"))
+            .lamp(LampColor.WHITE).lamp(LampColor.BLUE)
+            .expresses(SHUNT.id(), 0)
+            .expresses(STOP.id(), 1)
+            .semantics(SignalSemantics.SHUNT)
+            .build();
+
         /** 进路表示器：单灯，只显示方向。 */
         public static final SignalType ROUTE_INDICATOR = SignalType.builder(id("route_indicator"))
+            .system(id("yard"))
             .name(Component.translatable("signal_type.ctdapi.route_indicator"))
             .lamp(LampColor.WHITE)
             .expresses(DARK.id())
             .expresses(PROCEED.id(), 0)
             .semantics(SignalSemantics.ROUTE_INDICATOR)
+            .build();
+
+        static List<SignalType> allTypes() {
+            return List.of(BLOCK3, BLOCK4, HOME4, STARTING4, DISTANT, SHUNT_2, ROUTE_INDICATOR);
+        }
+
+        // ── 制度 ──────────────────────────────────────────────────────────
+
+        /** 干线四显示自动闭塞。 */
+        public static final SignalSystem MAINLINE_4 = SignalSystem.builder(DEFAULT_SYSTEM_ID)
+            .name(Component.translatable("signal_system.ctdapi.mainline_4"))
+            .palette(LampColor.RED, LampColor.YELLOW, LampColor.GREEN)
+            .aspect(STOP).aspect(CAUTION).aspect(ADVANCE_CAUTION).aspect(PROCEED).aspect(CALL_ON)
+            .type(BLOCK4).type(HOME4).type(STARTING4).type(DISTANT)
+            .fallback(BLOCK3)
+            .build();
+
+        /** 调车场制度。 */
+        public static final SignalSystem YARD = SignalSystem.builder(id("yard"))
+            .name(Component.translatable("signal_system.ctdapi.yard"))
+            .palette(LampColor.WHITE, LampColor.BLUE)
+            .aspect(SHUNT).aspect(STOP).aspect(DARK)
+            .type(SHUNT_2).type(ROUTE_INDICATOR)
+            .fallback(SHUNT_2)
             .build();
     }
 }

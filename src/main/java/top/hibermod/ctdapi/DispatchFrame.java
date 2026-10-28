@@ -4,6 +4,9 @@ import java.util.UUID;
 
 import net.minecraft.resources.ResourceLocation;
 
+import top.hibermod.ctdapi.hud.Hud;
+import top.hibermod.ctdapi.pis.Pis;
+
 /**
  * 单次调度帧的**输出**：内核通过它写指令。
  *
@@ -21,6 +24,15 @@ public interface DispatchFrame {
 
     /** 提交一条岔口锁闭指令。 */
     void switchLock(Command.SwitchCommand command);
+
+    /** 提交一条普通设备指令（地面 / 车载）。 */
+    void device(Command.DeviceCommand command);
+
+    /** 发布/更新一块 HUD 面板的本帧内容。不发布 = 该面板隐藏。 */
+    void hud(Hud.HudPanel panel);
+
+    /** 发布/更新一块 PIS 显示屏的本帧内容。不发布 = 保持上次内容。 */
+    void board(Pis.BoardModel board);
 
     /** 发布一条事件（会进入 PIS 总线与日志）。 */
     void event(RailwayEvent event);
