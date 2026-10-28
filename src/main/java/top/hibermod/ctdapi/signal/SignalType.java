@@ -139,6 +139,16 @@ public record SignalType(
             return this;
         }
 
+        /**
+         * 表达某个语义但**不点亮任何灯座**（灭灯 / 暗显示）。
+         *
+         * <p>必须单独提供：{@code expresses(id)} 在两个 varargs 重载之间是歧义的。
+         */
+        public Builder expresses(ResourceLocation aspect) {
+            aspectMap.put(aspect, List.of());
+            return this;
+        }
+
         /** 便捷写法：常亮若干灯座。 */
         public Builder expresses(ResourceLocation aspect, int... steadySlots) {
             List<LampDisplay> list = new ArrayList<>(steadySlots.length);

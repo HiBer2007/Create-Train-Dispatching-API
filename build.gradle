@@ -15,36 +15,103 @@ java {
     withSourcesJar()
 }
 
+// ── NeoForged maven 镜像 ──────────────────────────────────────────────────
+//
+// 背景：maven.neoforged.net 在部分网络下**TCP 层不可达**（不是仓库列表的问题，
+// 换配置救不了）。ForgeCDN 提供同构镜像，路径完全一致，只是主机名不同：
+//
+//     maven.neoforged.net/releases  →  neoforged.forgecdn.net/releases
+//
+// 下面这段在**任何** Maven 仓库被加入时检查一次，命中才重写，所以官方站点
+// 可达时它不会造成影响。ModDevGradle 是延迟注册仓库的，因此必须用
+// whenObjectAdded 而不是只遍历一次。
+//
+// 如果你有本地镜像（Nexus/Artifactory），把下面的 forgecdn 换成它即可。
+def neoforgeMirror = { repo ->
+    if (repo instanceof org.gradle.api.artifacts.repositories.MavenArtifactRepository) {
+        def u = repo.url.toString()
+        if (u.contains("://maven.neoforged.net")) {
+            repo.url = uri(u.replace("://maven.neoforged.net", "://neoforged.forgecdn.net"))
+            logger.lifecycle("[mirror] NeoForged maven -> ${repo.url}")
+        }
+    }
+}
+repositories.whenObjectAdded(neoforgeMirror)
+repositories.each(neoforgeMirror)
+gradle.projectsEvaluated { project.repositories.each(neoforgeMirror) }
+
+repositories {
+    maven { name = 'CreateMod'; url = 'https://maven.createmod.net' }
+    mavenCentral()
+}
+
 neoForge {
     version = project.neo_version
 
-    // 目前没有任何 mixin / 访问转换；本项目只提供接口，不含实现。
+    // 本 API 目前没有任何 mixin 与访问转换：它只提供接口，不含实现。
     // 实现方（调度内核所在的模组）负责所有注入。
-}
-
-repositories {
-    mavenCentral()
-    maven { name = 'CreateMod'; url = 'https://maven.createmod.net' }
 }
 
 // 本 API **刻意不依赖 Create**：所有类型只用到 Minecraft / NeoForge 的公开类。
 // 这样第三方内核不必随 Create 版本更新而重编译。
-// 如果你需要在实现模块里用 Create，请在那个模块里单独声明依赖。
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 21
 }
 
+// ── 边界检查 ──────────────────────────────────────────────────────────────
+//
+// 本仓库**只是契约层**：不是引擎宿主，不做渲染，不注册方块/物品，不带任何资源。
+// 下面这个任务把这条约定变成构建失败，而不只是写在一句话里。
+tasks.register('checkApiBoundary') {
+    group = 'verification'
+    description = 'API 只出契约：禁止客户端渲染类、禁止 assets/data 资源'
+
+    def javaDir = file('src/main/java')
+    def resDir = file('src/main/resources')
+    def forbidden = [
+        'net.minecraft.client.',
+        'net.neoforged.neoforge.client.',
+        'com.mojang.blaze3d.',
+        'net.minecraft.server.level.ServerLevel'
+    ]
+
+    doLast {
+        def problems = []
+        ['assets', 'data'].each { d ->
+            if (new File(resDir, d).exists()) {
+                problems << "src/main/resources/${d} 必须不存在（本 API 不提供纹理、模型、语言文件或数据）".toString()
+            }
+        }
+        if (javaDir.exists()) {
+            javaDir.eachFileRecurse { f ->
+                if (!f.name.endsWith('.java')) return
+                def text = f.text
+                forbidden.each { pkg ->
+                    if (text.contains(pkg)) {
+                        problems << "${f.absolutePath}: 引用了 ${pkg}（渲染/服务端实体属于宿主）".toString()
+                    }
+                }
+            }
+        }
+        if (problems) {
+            throw new GradleException("API 边界被破坏:\n  - " + problems.join("\n  - "))
+        }
+    }
+}
+
+tasks.named('check') { dependsOn 'checkApiBoundary' }
+
 jar {
     manifest {
         attributes(
-            'Specification-Title'     : project.mod_name,
-            'Specification-Vendor'    : project.mod_authors,
-            'Specification-Version'   : '1',
-            'Implementation-Title'    : project.name,
-            'Implementation-Version'  : project.version,
-            'Implementation-Vendor'   : project.mod_authors
+            'Specification-Title'    : project.mod_name,
+            'Specification-Vendor'   : project.mod_authors,
+            'Specification-Version'  : '1',
+            'Implementation-Title'   : project.name,
+            'Implementation-Version' : project.version,
+            'Implementation-Vendor'  : project.mod_authors
         )
     }
 }

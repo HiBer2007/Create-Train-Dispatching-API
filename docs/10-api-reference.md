@@ -8,14 +8,57 @@
 
 ## 0. 这份 API 是什么，不是什么
 
-| 是 | 不是 |
+| ✅ 是 | ❌ 不是 |
 |---|---|
-| 调度引擎的**接口契约** | 一个能跑的调度器 |
-| 信号制度的**开放注册表** | 一整套信号规则实现 |
-| 设备与 PIS/HUD 的**数据通道** | 具体的设备方块 |
-| 进程外引擎的**接入层** | 网络协议实现 |
+| 调度**引擎**的接口契约 | 一个能跑的调度器 |
+| **宿主模组**的接口契约 | 宿主模组本身（不做任何注入） |
+| 信号制度的**开放注册表** | 任何信号机方块或渲染 |
+| 设备 / HUD / PIS 的**数据契约** | 任何 HUD 绘制、翻牌屏渲染、纹理模型 |
+| 进程外引擎的**接入层定义** | 任何网络协议实现 |
 
-**本 jar 不改变任何游戏行为。** 所有实现（注入、方块、渲染、存档）都在消费它的模组里。
+### 0.1 三条硬边界
+
+**① 不是引擎。** 本仓库没有一行调度逻辑——没有寻路、没有进路、没有闭塞算法。
+「车该怎么走」全部由实现 `DispatchKernel` 的模组决定。
+
+**② 不是宿主。** 本仓库没有 mixin、没有 `@Mod` 主类、没有事件订阅、没有存档。
+把 Create 的 `TrackNode` 映射成 `Rail.NodeId`、把车的位置算成占用区间、把指令写回
+`train.speed`——全部是宿主模组的事。
+
+**③ 不带任何资源。** 没有纹理、模型、语言文件、声音、数据包。
+`src/main/resources` 里**只有** `META-INF/neoforge.mods.toml`。
+也不引用任何客户端类：`net.minecraft.client.*`、`com.mojang.blaze3d.*`、`GuiGraphics`、
+`PoseStack` 一个都没有。
+
+### 0.2 边界由构建强制
+
+这些不是口头约定，`checkApiBoundary` 任务会让违规直接构建失败：
+
+```bash
+./gradlew checkApiBoundary
+```
+
+| 检查项 | 违规后果 |
+|---|---|
+| `src/main/resources/assets` 存在 | 构建失败 |
+| `src/main/resources/data` 存在 | 构建失败 |
+| 源码引用 `net.minecraft.client.*` | 构建失败 |
+| 源码引用 `com.mojang.blaze3d.*` | 构建失败 |
+
+### 0.3 依赖面
+
+全部外部 import 只有 6 个，且都只到 Minecraft 层：
+
+```
+net.minecraft.nbt.CompoundTag
+net.minecraft.network.chat.Component
+net.minecraft.resources.ResourceKey
+net.minecraft.resources.ResourceLocation
+net.minecraft.world.level.Level
+org.jetbrains.annotations.Nullable
+```
+
+**刻意不依赖 Create**——否则 API 会把 Create 的版本约束传染给每一个引擎与宿主模组。
 
 ---
 

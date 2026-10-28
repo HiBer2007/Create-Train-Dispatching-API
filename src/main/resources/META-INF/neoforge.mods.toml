@@ -8,12 +8,22 @@ version = "${file.jarVersion}"
 displayName = "Create Train Dispatching API"
 authors = "HiBer_2007"
 description = '''
-A pluggable signal and dispatching API for Create's railway system.
+Contracts for a pluggable signal system and dispatching engine for Create's railways.
 
-This jar contains interfaces only. It does not change any behaviour on its own —
-a mod that consumes it provides the implementation (the dispatching kernel) and
-performs all of the necessary integration.
+This jar is a CONTRACT LAYER ONLY. It registers no blocks, items, entities or
+datapack entries, performs no rendering, and ships no assets, models, textures or
+language files. It contains no mixins and does not touch any Create class.
+
+Both the dispatch engine and the host integration are provided by other mods:
+  * an engine mod implements DispatchKernel (timetable, routing, block logic);
+  * a host mod implements Topology / Telemetry / DispatchFrame (Create integration).
+
+Depending on this jar alone changes nothing in game.
 '''
+
+# 这个 jar 只是一层契约。它不实现引擎，也不做宿主。
+# 引擎与宿主都由其他模组提供，见 README。
+side = "BOTH"
 
 [[dependencies.ctdapi]]
 modId = "neoforge"

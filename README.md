@@ -1,12 +1,64 @@
 # Create Train Dispatching API
 
-为 Create 的铁路系统提供一套**可插拔的信号与调度接口**。
-
-本仓库只包含**接口**，不含实现。它自身不改变任何游戏行为——由消费它的模组提供调度内核并完成所有集成。
+为 Create 的铁路系统提供一套**可插拔的信号与调度契约**。
 
 - 目标版本：**Minecraft 1.21.1 / NeoForge 21.1.219**
 - 许可证：**LGPL-3.0-or-later**
 - Maven：`top.hibermod:create-train-dispatching-api`
+- 状态：**已通过真实 NeoForge 环境构建**（Gradle 8.8 / JDK 21，见 §构建）
+
+---
+
+## 这个仓库是什么 / 不是什么
+
+| ✅ 是 | ❌ 不是 |
+|---|---|
+| 调度**引擎**的接口契约 | 调度引擎本身 |
+| 宿主模组的接口契约 | 宿主模组本身 |
+| 信号制度的**开放注册表** | 任何信号机方块或渲染 |
+| 设备 / HUD / PIS 的**数据契约** | 任何 HUD 绘制、翻牌屏渲染 |
+| 进程外引擎的**接入层定义** | 任何网络协议实现 |
+
+**引擎和宿主都由其他模组提供。** 本仓库一行游戏行为都没有：
+
+- 不做 Mixin，不注入任何 Create 类
+- 不注册任何方块、物品、实体、数据包、注册表项
+- 不做渲染，不含客户端类（`net.minecraft.client.*` 一个引用都没有）
+- **不提供任何纹理、模型、语言文件、声音或数据**——`src/main/resources` 里只有 `META-INF/neoforge.mods.toml`
+
+这条边界由构建任务 `checkApiBoundary` **强制**：一旦有人在 `src/main/resources` 下放 `assets/`、`data/`，
+或在源码里引用 `net.minecraft.client.*` / `com.mojang.blaze3d.*`，构建直接失败。
+
+```bash
+./gradlew checkApiBoundary
+```
+
+**依赖只到 Minecraft 层**，全部外部 import 就这 6 个：
+
+```
+net.minecraft.nbt.CompoundTag
+net.minecraft.network.chat.Component
+net.minecraft.resources.ResourceKey
+net.minecraft.resources.ResourceLocation
+net.minecraft.world.level.Level
+org.jetbrains.annotations.Nullable
+```
+
+> 刻意**不依赖 Create**——引擎与宿主的模组自己依赖 Create，不会把版本约束传染给 API。
+
+---
+
+## 三层职责
+
+```
+① 引擎模组（其他模组）      时刻表 · 调度 · 进路 · 闭塞 · 延误传播
+         ↓ 实现 DispatchKernel
+② 宿主模组（其他模组）      Mixin · 拓扑镜像 · 遥测 · 指令执行 · 存档
+         ↓ 实现 Topology / Telemetry / DispatchFrame
+③ Create                  轨道图 · 列车物理 · 信号机方块
+         ↓
+   ★ 本仓库提供 ①↔② 之间的契约，以及 ②↔③ 所需的值对象
+```
 
 ---
 
@@ -24,7 +76,11 @@ Create 的列车系统是一套**有轨电车**模型：一辆车、一条路、
 | `FrameContext` / `DispatchFrame` | 内核的读写面 |
 | `Topology` / `Telemetry` | 只读的拓扑与列车状态 |
 | `Command` | 写回指令（距离授权、限速、进路、道岔锁闭、信号显示） |
-| `signal.*` | 信号系统的**开放注册表**（灯色 / 语义 / 机型） |
+| `signal.*` | 信号系统的**开放注册表**（制度 / 机型 / 语义 / 灯色） |
+| `device.*` | 地面与车载设备（只描述，不实现） |
+| `timetable.*` | 交路：绑定信号制度 |
+| `hud.*` / `pis.*` | **纯数据**面板与显示屏内容 |
+| `remote.*` | 进程外引擎的传输/编解码契约 |
 
 ---
 
@@ -95,7 +151,7 @@ SignalSemantics { target, grantsAuthority, permissiveWhenClosed, stoppingPoint, 
 ```
 src/main/java/top/hibermod/ctdapi/
 ├── DispatchKernel.java      内核接口（唯一的决策入口）
-├── DispatchKernels.java     内核注册表
+├── DispatchKernels.java     内核注册表（查找表，不是 NeoForge registry）
 ├── KernelEnv.java           生命周期服务（状态持久化 / 日志 / 配置）
 ├── FrameContext.java        每帧输入
 ├── DispatchFrame.java       每帧输出
@@ -104,12 +160,16 @@ src/main/java/top/hibermod/ctdapi/
 ├── Command.java             写回指令
 ├── RailwayEvent.java        事件
 ├── Rail.java                稳定标识（NodeId / EdgeId / Span）
-└── signal/
-    ├── LampColor / LampMode / LampSpec / LampDisplay   灯
-    ├── Aspect                                          语义
-    ├── SignalType                                      机型
-    ├── SignalSemantics                                 联锁语义
-    └── SignalRegistries                                开放注册表
+├── ApiCatalog.java          统一索引（有哪些、该用哪个）
+├── signal/                  制度 / 机型 / 语义 / 灯色
+├── device/                  地面与车载设备
+├── timetable/               交路（绑定信号制度）
+├── hud/                     HUD 面板（纯数据）
+├── pis/                     PIS 显示屏（纯数据）
+└── remote/                  进程外引擎的传输 / 编解码契约
+
+src/main/resources/
+└── META-INF/neoforge.mods.toml    ← 唯一的资源文件
 ```
 
 `docs/` 下是设计文档，其中：
@@ -118,6 +178,7 @@ src/main/java/top/hibermod/ctdapi/
 - `07-custom-signals.md` — 为什么原生信号机只有一个灯，以及怎么换掉
 - `08-signal-registry-api.md` — 信号注册 API（语义 / 机型 / 灯位）
 - `09-compat-steam-n-rails.md` — 与汽鸣铁道（Steam 'n' Rails）的兼容性，含真实道岔实现剖析
+- `10-api-reference.md` — **完整参考手册**（按 PIS / 信号 / 地面设备 / 车载设备 / HUD / 注册分类）
 
 ---
 
@@ -127,7 +188,47 @@ src/main/java/top/hibermod/ctdapi/
 ./gradlew build
 ```
 
-> ⚠ 构建脚本按 NeoForge 1.21.1 标准编写，但**尚未在联网环境中实测**（编写环境无法拉取 Gradle/NeoForge 依赖）。首次构建若失败，请先确认 `neo_version` 与本地缓存的 NeoForge 一致。
+**已实测通过**（2026-10，Gradle 8.8 / JDK 21 / NeoForge 21.1.219 / MC 1.21.1，`BUILD SUCCESSFUL in 2m 22s`）：
+
+```
+build/libs/create-train-dispatching-api-0.1.0.jar           119.7 KB
+build/libs/create-train-dispatching-api-0.1.0-sources.jar    52.5 KB
+```
+
+### 国内网络的两个坑
+
+**① NeoForged maven 可能 TCP 不可达**
+
+`maven.neoforged.net` 在部分网络下连握手都完不成（DNS 正常，443 超时）。ForgeCDN 有同构镜像，
+路径完全一致，`build.gradle` 里已自动重写：
+
+```
+maven.neoforged.net/…  →  neoforged.forgecdn.net/…
+```
+
+重写挂在 `repositories.whenObjectAdded` 上——ModDevGradle 是**延迟注册**仓库的，
+只在 plugins 块之后遍历一次会漏掉它。
+
+**② Gradle 发行版走阿里云**
+
+`gradle/wrapper/gradle-wrapper.properties` 指向 `mirrors.aliyun.com`，不用 `services.gradle.org`。
+
+### 离线结构自检
+
+拉不到 NeoForge 时，可以用桩做一次纯语法/类型检查（**不校验 Minecraft API 兼容性**）：
+
+```bash
+pwsh -File tools/verify-offline.ps1
+```
+
+---
+
+## 校验
+
+```bash
+./gradlew checkApiBoundary   # 边界：无客户端类、无 assets/data
+./gradlew build              # 编译 + 打包
+```
 
 ---
 

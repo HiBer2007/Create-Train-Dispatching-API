@@ -28,7 +28,18 @@ public sealed interface RailwayEvent {
     record TrainDeparted(long gameTime, UUID trainId, UUID stationId) implements RailwayEvent {}
 
     /** 列车被扣停。{@code reason} 会进 PIS 播报。 */
-    record TrainHeld(long gameTime, UUID trainId, String reason) implements RailwayEvent {}
+    record TrainHeld(long gameTime, UUID trainId, String reason) implements RailwayEvent {
+
+        /**
+         * 不带时间戳的写法，供 {@link DispatchFrame} 的便捷方法使用。
+         *
+         * <p>{@code gameTime = 0} 表示「由宿主在派发时补上当前 tick」。
+         * 内核若拿得到 {@link FrameContext#gameTime()}，请用主构造器。
+         */
+        public TrainHeld(UUID trainId, String reason) {
+            this(0L, trainId, reason);
+        }
+    }
 
     /** 列车脱轨或出现结构性故障：宿主已停止对该车的自动控制。 */
     record TrainFaulted(long gameTime, UUID trainId, String detail) implements RailwayEvent {}
