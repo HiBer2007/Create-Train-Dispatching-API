@@ -165,6 +165,25 @@ public final class SignalRegistries {
      *
      * @throws IllegalStateException 校验失败时抛出，消息里列出全部问题
      */
+
+    // ── 热重载支持 ────────────────────────────────────────────────────────
+    //
+    // 只给热重载用。register 的「重复即抛」是最有价值的早期错误，
+    // 让重载顺手把它削弱，等于拿安全性换方便。
+
+    /** 注销一项（热重载专用）。按 机型 → 语义 → 灯色 → 制度 的顺序查找。 */
+    public static boolean remove(ResourceLocation id) {
+        if (TYPES.remove(id) != null) return true;
+        if (ASPECTS.remove(id) != null) return true;
+        if (LAMPS.remove(id) != null) return true;
+        return SYSTEMS.remove(id) != null;
+    }
+
+    /** 解冻（热重载专用）。调用方必须保证随后重新 freeze。 */
+    public static void unfreeze() { frozen = false; }
+
+    /** 是否已冻结。 */
+    public static boolean isFrozen() { return frozen; }
     public static void freeze() {
         if (frozen) return;
 

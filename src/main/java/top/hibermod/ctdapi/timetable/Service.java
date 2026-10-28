@@ -162,6 +162,21 @@ public record Service(
      *
      * <p>宿主应在 {@link top.hibermod.ctdapi.ApiCatalog#freezeAll()} 之前注册完交路。
      */
+
+    // ── 热重载支持 ────────────────────────────────────────────────────────
+    //
+    // 只给热重载用，理由同 SignalRegistries：register 的重复检查不能被削弱。
+
+    /** 注销一项（热重载专用）。 */
+    public static boolean remove(ResourceLocation id) {
+        return SERVICES.remove(id) != null;
+    }
+
+    /** 解冻（热重载专用）。调用方必须保证随后重新 freeze。 */
+    public static void unfreeze() { frozen = false; }
+
+    /** 是否已冻结。 */
+    public static boolean isFrozen() { return frozen; }
     public static void freeze() {
         StringBuilder problems = new StringBuilder();
         for (Service s : SERVICES.values()) {
