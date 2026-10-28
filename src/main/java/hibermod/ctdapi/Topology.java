@@ -71,16 +71,19 @@ public interface Topology {
     /**
      * 一条轨道边。
      *
-     * @param length           边长（格）。跨维度边为 0。
+     * @param length           边长（格）。跨维度边为 0
      * @param interDimensional 是否跨维度
      * @param isTurn           是否是贝塞尔弯道（曲率不均匀，位置换算需用弧长参数化）
+     * @param enabled          **当前是否可通行**。道岔会把未开通的股道置为 false；
+     *                         实现方必须在寻路与授权计算中尊重它，否则会「排进一条已被扳开的股道」
      */
     record Edge(
         Rail.EdgeId id,
         double length,
         boolean interDimensional,
         boolean isTurn,
-        String trackMaterialId
+        String trackMaterialId,
+        boolean enabled
     ) {}
 
     /**
@@ -96,8 +99,7 @@ public interface Topology {
      * @param hasFirstFace  该机在「面向 first 端」是否有灯头
      * @param hasSecondFace 该机在「面向 second 端」是否有灯头
      * @param crossSignal   是否是交叉信号（一机管多股道）
-     * @param kind          信号机用途分类，影响联锁如何对待它
-     * @param lampCount     每个灯头的灯座数量（3 = 三显示，4 = 四显示，1 = 单灯）
+     * @param typeId        机型 id（见 {@link SignalType}）
      * @param label         信号机编号/代号（如 "X101"），可为空
      */
     record SignalSite(
@@ -143,15 +145,48 @@ public interface Topology {
     Aspect aspect(ResourceLocation id);
 
     /**
-     * 一个岔口。Create 的轨道**不会**平移，所以这里的「定位」是纯逻辑概念：
-     * 它表示「哪一条支线当前被进路锁闭」。
+     * 一个岔口。
      *
-     * @param node     岔口节点
-     * @param branches 从该节点出发的全部边（顺序稳定，见 {@code normalBranch}）
-     * @param normal   最顺直的那条支线（{@link #branches()} 中的下标）。玩家未标注时由几何自动推定。
+     * <p>Create 本身没有道岔实体——岔口只是「连接数 ≥3 的节点」，股道选择完全无状态。
+     * 真实道岔由第三方实现（如 Steam 'n' Rails 的 {@code TrackSwitch}，它把未开通的股道
+     * 置为 `enabled = false`）。宿主若有道岔实现应把它的状态映射到这里；若没有，
+     * 只能靠 {@link Edge#enabled()} 与进路锁闭近似。
+     *
+     * @param node         岔心节点
+     * @param position     当前位置
+     * @param branches     从岔心出发的全部股道
+     * @param normal       直股在 {@code branches} 中的下标（无直股时为 -1）
+     * @param activeBranch 当前开通的股道；{@code null} 表示未确定
+     * @param automatic    是否允许列车自动选股道
+     * @param locked       是否被人工锁闭（锁闭时禁止调度改位）
      */
-    record SwitchSite(Rail.NodeId node, List<Rail.EdgeId> branches, int normal) {
+    record SwitchSite(
+        Rail.NodeId node,
+        SwitchPosition position,
+        List<Rail.EdgeId> branches,
+        int normal,
+        Rail.EdgeId activeBranch,
+        boolean automatic,
+        boolean locked
+    ) {
         public Rail.EdgeId branch(int index) { return branches.get(index); }
+    }
+
+    /**
+     * 道岔位置。
+     *
+     * <p>三态来自真实的单开道岔模型：直股 / 左开 / 右开。
+     * 比「定位/反位」更准确，也让调度能区分左右线。
+     */
+    enum SwitchPosition {
+        /** 直股方向（定位）。 */
+        NORMAL,
+        /** 左开（反位）。 */
+        REVERSE_LEFT,
+        /** 右开（反位）。 */
+        REVERSE_RIGHT,
+        /** 未知 / 宿主没有道岔实现。 */
+        UNKNOWN
     }
 
     /**

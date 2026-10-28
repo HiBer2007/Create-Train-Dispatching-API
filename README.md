@@ -117,6 +117,7 @@ src/main/java/top/hibermod/ctdapi/
 - `06-dispatch-spi.md` — 内核接口说明与需求映射
 - `07-custom-signals.md` — 为什么原生信号机只有一个灯，以及怎么换掉
 - `08-signal-registry-api.md` — 信号注册 API（语义 / 机型 / 灯位）
+- `09-compat-steam-n-rails.md` — 与汽鸣铁道（Steam 'n' Rails）的兼容性，含真实道岔实现剖析
 
 ---
 

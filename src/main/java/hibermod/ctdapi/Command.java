@@ -123,9 +123,15 @@ public final class Command {
      * 只有「锁闭某条支线」这一个语义。视觉上如需道岔摆动动画，由宿主单独实现
      * （那是一层装饰，不参与图）。
      *
+     * <p>宿主若检测到真实的道岔实现（例如 Steam 'n' Rails 的 {@code TrackSwitch}），
+     * 应把本指令**翻译成对它的调用**（`setSwitchState(NORMAL / REVERSE_LEFT / REVERSE_RIGHT)`），
+     * 而不是自己维护一套并行的岔位——否则两套状态会互相打架。
+     *
      * @param node     岔口
-     * @param branch   期望锁定的支线边；{@code null} 表示解除锁闭
+     * @param position 期望位置；{@code UNKNOWN} 表示"按 branch 推断"
+     * @param branch   期望开通的股道边；{@code null} 表示解除锁闭
      * @param holder   锁的持有者（进路 id），用于冲突检测
      */
-    public record SwitchCommand(Rail.NodeId node, Rail.EdgeId branch, long holder) {}
+    public record SwitchCommand(Rail.NodeId node, Topology.SwitchPosition position,
+                                Rail.EdgeId branch, long holder) {}
 }

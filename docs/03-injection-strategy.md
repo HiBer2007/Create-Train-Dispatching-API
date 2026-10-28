@@ -182,6 +182,11 @@ public abstract class SignalBoundaryMixin {
 
 **这 7 个点 CRN 一个都没碰。** 详细的时序、数学与风险见 `docs/05-full-takeover-design.md`。
 
+> ⚠ **装了汽鸣铁道（Steam 'n' Rails）时的额外禁区**：它已经占据 `TrackEdge#canTravelTo`
+> （`@Inject HEAD cancellable`，用于道岔门控）与 `Train#frontSignalListener`（`@Inject RETURN cancellable`）。
+> 前者**绝对不能再注入**；后者必须**链式包装**而不是替换返回值。
+> 完整冲突矩阵见 **[`docs/09-compat-steam-n-rails.md`](09-compat-steam-n-rails.md) §2**。
+
 **为什么 S-4/S-7/S-8/S-9/S-10 的 `require = 0`**：它们是「增强」不是「基线」。上游改签名时，我们希望**降级成原版行为**而不是崩服。S-1..S-3、S-5..S-6 是「语义基线」，硬性要求；但按 R5，仍要提供 `require = 0` + 自检告警的备选方案（见 §5.2）。
 
 > **装上 CRN 时的额外约束**：上表 S-9 与 CRN 的 `ScheduleRuntimeMixin` 冲突（两个 cancellable HEAD）；S-3 之外的任何 `Navigation#search` 改写都要避开 CRN 的锚点。
