@@ -21,6 +21,9 @@ public final class DispatchKernels {
 
     private static final Map<ResourceLocation, Supplier<DispatchKernel>> FACTORIES = new ConcurrentHashMap<>();
 
+    /** 每次 register / replace / remove 递增，供宿主发现「同名工厂被换掉了」。 */
+    private static volatile long revision;
+
     /**
      * 注册一个内核工厂。
      *
@@ -35,6 +38,20 @@ public final class DispatchKernels {
         if (FACTORIES.putIfAbsent(id, factory) != null) {
             throw new IllegalStateException("Duplicate dispatch kernel id: " + id);
         }
+        revision++;
+    }
+
+    /**
+     * 注册表的修订号，每次 register / replace / remove 都 +1。
+     *
+     * <p><b>为什么需要它</b>：注册表里存的是**工厂**，宿主拿不到「实例被换掉了」这件事。
+     * 热重载换掉同名工厂时，宿主按 id 判断不出变化，会一直握着绑在旧实例上的 pass——
+     * 表现为「重载成功，但行为没变」，而且旧脚本还在跑。
+     *
+     * <p>宿主只需要记住上次见到的修订号，变了就重建全部 pass。
+     */
+    public static long revision() {
+        return revision;
     }
 
     /** 是否存在该内核。 */
@@ -57,7 +74,9 @@ public final class DispatchKernels {
         if (id == null || factory == null) {
             throw new IllegalArgumentException("id and factory must be non-null");
         }
-        return FACTORIES.put(id, factory) != null;
+        boolean existed = FACTORIES.put(id, factory) != null;
+        revision++;
+        return existed;
     }
 
     /**
@@ -66,7 +85,9 @@ public final class DispatchKernels {
      * @return 是否存在过
      */
     public static boolean remove(ResourceLocation id) {
-        return FACTORIES.remove(id) != null;
+        boolean existed = FACTORIES.remove(id) != null;
+        if (existed) revision++;
+        return existed;
     }
 
     /** 全部已注册内核 id（快照）。 */
