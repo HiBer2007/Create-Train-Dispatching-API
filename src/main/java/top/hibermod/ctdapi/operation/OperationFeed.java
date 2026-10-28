@@ -3,6 +3,10 @@ package top.hibermod.ctdapi.operation;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import top.hibermod.ctdapi.Command;
+import top.hibermod.ctdapi.hud.Hud;
+import top.hibermod.ctdapi.pis.Pis;
+import top.hibermod.ctdapi.RailwayEvent;
 import top.hibermod.ctdapi.status.Emergency;
 import top.hibermod.ctdapi.status.Restrictions;
 
@@ -45,6 +49,33 @@ public final class OperationFeed {
 
         /** 应急解除。 */
         default void onEmergencyCleared(Emergency.Order order) {}
+
+        // ── 宿主不执行、只转交的指令 ─────────────────────────────────────
+        //
+        // 这几类是「不属于宿主」的东西：设备协议、牵引电量、运营服务、
+        // HUD 面板、PIS 板面、事件流。它们的实际效果由**别的模组**负责
+        // （后台调度模组、供电模组、PIS 渲染模组）。
+        //
+        // 宿主既不执行也不丢弃，而是**转交**给订阅者。
+        // 丢弃会让脚本作者以为指令生效了——这是最难查的一类问题。
+
+        /** 脚本下发了设备指令。 */
+        default void onDeviceCommand(Command.DeviceCommand command) {}
+
+        /** 脚本下发了牵引/电量指令。 */
+        default void onEnergyCommand(Command.EnergyCommand command) {}
+
+        /** 脚本下发了运营服务指令。 */
+        default void onServiceCommand(Command.ServiceCommand command) {}
+
+        /** 脚本要求显示一个 HUD 面板。 */
+        default void onHudPanel(Hud.HudPanel panel) {}
+
+        /** 脚本要求更新一块 PIS 板面。 */
+        default void onBoardModel(Pis.BoardModel board) {}
+
+        /** 脚本发出了一条铁路事件。 */
+        default void onRailwayEvent(RailwayEvent event) {}
     }
 
     private static final List<Listener> LISTENERS = new CopyOnWriteArrayList<>();
@@ -89,6 +120,32 @@ public final class OperationFeed {
 
     public static void emergencyIssued(Emergency.Order o) {
         fire(l -> l.onEmergencyIssued(o));
+    }
+
+    // ── 转交类事件（宿主不执行）────────────────────────────────────────────
+
+    public static void deviceCommand(Command.DeviceCommand c) {
+        fire(l -> l.onDeviceCommand(c));
+    }
+
+    public static void energyCommand(Command.EnergyCommand c) {
+        fire(l -> l.onEnergyCommand(c));
+    }
+
+    public static void serviceCommand(Command.ServiceCommand c) {
+        fire(l -> l.onServiceCommand(c));
+    }
+
+    public static void hudPanel(Hud.HudPanel p) {
+        fire(l -> l.onHudPanel(p));
+    }
+
+    public static void boardModel(Pis.BoardModel b) {
+        fire(l -> l.onBoardModel(b));
+    }
+
+    public static void railwayEvent(RailwayEvent e) {
+        fire(l -> l.onRailwayEvent(e));
     }
 
     public static void emergencyCleared(Emergency.Order o) {
