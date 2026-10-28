@@ -43,6 +43,30 @@ public final class AtoEngines {
     }
 
     /**
+     * 替换一个已注册的 ATO（**热重载专用**）。
+     *
+     * <p>重复 id 不抛异常，而是换掉实例。正常注册仍走 {@link #register}——
+     * 别让热重载的方便把「重复注册」这个早期错误吞掉。
+     *
+     * @return 是否存在旧的注册
+     */
+    public static boolean replace(AtoEngine engine) {
+        if (engine == null) {
+            throw new IllegalArgumentException("engine must be non-null");
+        }
+        return ENGINES.put(engine.id(), engine) != null;
+    }
+
+    /**
+     * 注销一个 ATO（**热重载专用**）。
+     *
+     * @return 是否存在过
+     */
+    public static boolean remove(ResourceLocation id) {
+        return ENGINES.remove(id) != null;
+    }
+
+    /**
      * 某套信号制度对应的 ATO。
      *
      * <p>一套制度**最多一个** ATO；注册第二个会在 {@link #freeze()} 时报错。

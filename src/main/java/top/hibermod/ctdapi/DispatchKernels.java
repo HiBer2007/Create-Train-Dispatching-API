@@ -42,6 +42,33 @@ public final class DispatchKernels {
         return FACTORIES.containsKey(id);
     }
 
+    /**
+     * 替换一个已注册的内核工厂（**热重载专用**）。
+     *
+     * <p>与 {@link #register} 的区别：重复 id 不抛异常，而是换掉工厂。
+     * 只有脚本/配置热重载才该用它——正常注册仍然走 {@code register}，
+     * 否则「重复注册」这个最有价值的早期错误就被吞掉了。
+     *
+     * <p>宿主负责在替换后调用旧实例的 {@code onDetach()} 与新实例的 {@code onAttach(env)}。
+     *
+     * @return 是否存在旧的注册
+     */
+    public static boolean replace(ResourceLocation id, Supplier<DispatchKernel> factory) {
+        if (id == null || factory == null) {
+            throw new IllegalArgumentException("id and factory must be non-null");
+        }
+        return FACTORIES.put(id, factory) != null;
+    }
+
+    /**
+     * 注销一个内核（**热重载专用**）。
+     *
+     * @return 是否存在过
+     */
+    public static boolean remove(ResourceLocation id) {
+        return FACTORIES.remove(id) != null;
+    }
+
     /** 全部已注册内核 id（快照）。 */
     public static java.util.Set<ResourceLocation> registeredIds() {
         return java.util.Set.copyOf(FACTORIES.keySet());
