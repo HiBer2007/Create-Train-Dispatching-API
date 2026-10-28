@@ -1,6 +1,6 @@
 # 08 — 信号系统开放注册 API
 
-> 代码：`design/spi/src/main/java/top/hibermod/ctdapi/signal/`（8 个文件）
+> 代码：`src/main/java/top/hibermod/ctdapi/signal/`（8 个文件）
 > 背景：`docs/07-custom-signals.md`（原生只有一个灯）
 
 ---

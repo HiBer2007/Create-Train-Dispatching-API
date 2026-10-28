@@ -1,6 +1,6 @@
 # 06 — 调度内核接口（SPI）说明
 
-> 配套代码：`design/spi/src/main/java/top/hibermod/ctdapi/`（8 个文件，可直接落进 mod）
+> 配套代码：`src/main/java/top/hibermod/ctdapi/`（8 个文件，可直接落进 mod）
 > 架构背景：`docs/05-full-takeover-design.md`
 
 ---

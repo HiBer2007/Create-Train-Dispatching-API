@@ -1,7 +1,7 @@
 # 05 — 整体接管：把 Create 变成「轨道图 + 物理引擎」
 
 > 基线：Create `7ff2760`（6.0.11）、NeoForge 21.1.219、MC 1.21.1
-> 配套接口：`design/spi/`（可编译的 Java 契约）、`docs/06-dispatch-spi.md`
+> 配套接口：`mods/ctdapi/src/main/java/top/hibermod/ctdapi/`（可编译的 Java 契约）、`docs/06-dispatch-spi.md`
 
 ---
 
@@ -384,7 +384,7 @@ public TrackNodeLocation(double x, double y, double z) {
 
 即 **水平半格量化 + 垂直半格**，再加 `yOffsetPixels`（1/16 格）和 `dimension`。`equals` 要求同维度同偏移（`:62-69`），`hashCode` 含维度（`:72-74`）。
 
-→ 稳定 ID 直接照抄这套量化，见 `design/spi/.../Rail.NodeId`。
+→ 稳定 ID 直接照抄这套量化，见 `src/main/java/top/hibermod/ctdapi/Rail.NodeId`。
 
 **边 ID** = 两个端点 ID 的**规范化有序对**（Create 内部一条边存两遍，`connectionsByNode` 是双向的）。
 

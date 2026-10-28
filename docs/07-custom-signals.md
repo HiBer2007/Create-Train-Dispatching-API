@@ -281,7 +281,7 @@ static long toMask(Aspect aspect, int lampCount) {
 enum SignalKind { HOME, STARTING, BLOCK, SHUNT, DISTANT, ROUTE_INDICATOR }
 ```
 
-（定义在 `design/spi/.../Topology.java`，内核能看到。）
+（定义在 `src/main/java/top/hibermod/ctdapi/Topology.java`，内核能看到。）
 
 真正需要**按类型区分**的是联锁逻辑，不是渲染：
 
