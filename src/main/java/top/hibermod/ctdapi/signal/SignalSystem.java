@@ -98,14 +98,38 @@ public record SignalSystem(
             return this;
         }
 
+        /** 按 id 收录语义。语义必须已注册，`freeze()` 会校验。 */
+        public Builder aspectId(ResourceLocation aspectId) {
+            aspects.add(aspectId);
+            return this;
+        }
+
         public Builder type(SignalType type) {
             types.add(type.id());
+            return this;
+        }
+
+        /**
+         * 按 id 收录机型。
+         *
+         * <p>用于「机型还没注册，但制度要先声明」的场景（脚本注册、跨模组延迟注册）。
+         * {@link #build()} 不校验存在性，校验统一在 `freeze()` 里做。
+         */
+        public Builder typeId(ResourceLocation typeId) {
+            types.add(typeId);
             return this;
         }
 
         public Builder fallback(SignalType type) {
             types.add(type.id());
             this.fallback = type.id();
+            return this;
+        }
+
+        /** 按 id 指定回退机型。语义同 {@link #typeId(ResourceLocation)}。 */
+        public Builder fallbackId(ResourceLocation typeId) {
+            types.add(typeId);
+            this.fallback = typeId;
             return this;
         }
 
