@@ -47,7 +47,18 @@ public record Service(
     @Nullable Component line,
     ResourceLocation signalSystemId,
     @Nullable ResourceLocation speedClassId,
-    int priority
+    int priority,
+    /**
+     * 停站序列（有序）。
+     *
+     * <p><b>为什么它必须在这里</b>：只给「车次号 + 交路 id」是造不出一张时刻表的——
+     * 宿主要把车次落成 Create 的 {@code Schedule}，需要知道停哪几站、按什么顺序。
+     * 没有这个字段，「指派驱动运行」在实现层根本无从下手。
+     *
+     * <p>元素是车站 id（宿主的车站命名空间），不是 Create 的 {@code GlobalStation} 对象：
+     * API 层不持有世界对象。
+     */
+    List<ResourceLocation> stops
 ) {
 
     public Service {
@@ -75,6 +86,7 @@ public record Service(
         private ResourceLocation signalSystemId;
         private ResourceLocation speedClassId;
         private int priority = 100;
+        private List<ResourceLocation> stops = List.of();
 
         private Builder(ResourceLocation id) {
             this.id = id;
@@ -111,6 +123,20 @@ public record Service(
             return this;
         }
 
+        /** 停站序列（有序）。可多次调用累加。 */
+        public Builder stop(ResourceLocation stationId) {
+            List<ResourceLocation> next = new java.util.ArrayList<>(stops);
+            next.add(stationId);
+            this.stops = List.copyOf(next);
+            return this;
+        }
+
+        /** 一次性设置整条停站序列。 */
+        public Builder stops(List<ResourceLocation> stationIds) {
+            this.stops = stationIds == null ? List.of() : List.copyOf(stationIds);
+            return this;
+        }
+
         public Builder priority(int priority) {
             this.priority = priority;
             return this;
@@ -119,7 +145,7 @@ public record Service(
         public Service build() {
             Objects.requireNonNull(code, "code");
             Objects.requireNonNull(signalSystemId, "signalSystemId");
-            return new Service(id, code, line, signalSystemId, speedClassId, priority);
+            return new Service(id, code, line, signalSystemId, speedClassId, priority, stops);
         }
     }
 
