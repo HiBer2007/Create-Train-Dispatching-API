@@ -130,3 +130,10 @@ publishing {
         }
     }
 }
+
+tasks.register('assignmentsTest', JavaExec) {
+    group = 'verification'
+    description = '改派语义回归：把最后一辆车摘走时旧指派应当整个撤掉'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'top.hibermod.ctdapi.tools.AssignmentsPublishTest'
+}

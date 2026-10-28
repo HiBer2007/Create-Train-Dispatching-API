@@ -45,8 +45,16 @@ public final class Assignments {
             if (other != null && !other.equals(assignment.id())) {
                 Assignment old = BY_ID.get(other);
                 if (old != null) {
-                    // 这辆车原来在别的指派里：把那个指派里的这辆车移除
-                    BY_ID.put(other, withoutUnit(old, u));
+                    // 这辆车原来在别的指派里：把它从那里摘掉。
+                    // 摘空了就整个撤掉——空指派在 Assignment 的构造契约里是非法的，
+                    // 硬造会抛异常；而「把某辆车的最后一个车组改派走」是再正常不过的操作。
+                    Assignment reduced = withoutUnit(old, u);
+                    if (reduced == null) {
+                        BY_ID.remove(other);
+                        OperationFeed.assignmentRevoked(old);
+                    } else {
+                        BY_ID.put(other, reduced);
+                    }
                 }
             }
         }
@@ -54,6 +62,11 @@ public final class Assignments {
         return Optional.ofNullable(previous);
     }
 
+    /**
+     * 从指派里摘掉一辆车。
+     *
+     * @return 摘完还剩内容的新指派；**一个车组都不剩时返回 {@code null}**
+     */
     private static Assignment withoutUnit(Assignment a, UnitNumber unit) {
         List<UnitSet> sets = new ArrayList<>();
         for (UnitSet s : a.sets()) {
@@ -67,6 +80,7 @@ public final class Assignments {
                 sets.add(s);
             }
         }
+        if (sets.isEmpty()) return null;
         return new Assignment(a.id(), a.run(), sets, a.source(), a.issuedAt());
     }
 
