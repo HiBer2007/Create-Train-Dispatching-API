@@ -50,6 +50,7 @@ public final class Assignments {
                 }
             }
         }
+        OperationFeed.assignmentPublished(assignment);
         return Optional.ofNullable(previous);
     }
 
@@ -74,6 +75,7 @@ public final class Assignments {
         Assignment a = BY_ID.remove(id);
         if (a == null) return false;
         for (UnitNumber u : a.allUnits()) BY_UNIT.remove(u);
+        OperationFeed.assignmentRevoked(a);
         return true;
     }
 

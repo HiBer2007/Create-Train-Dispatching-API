@@ -127,6 +127,7 @@ public final class Restrictions {
 
     /** 发布一条限制。重复 id 抛异常（避免静默覆盖掉别人的封路）。 */
     public static Restriction publish(Restriction restriction) {
+        top.hibermod.ctdapi.operation.OperationFeed.restrictionChanged(restriction);
         if (ACTIVE.putIfAbsent(restriction.id(), restriction) != null) {
             throw new IllegalStateException("Restriction already published: " + restriction.id());
         }
