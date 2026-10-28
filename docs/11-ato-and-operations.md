@@ -129,15 +129,21 @@ Service.builder(rl("mymod", "g1"))
 
 ### 3.2 核对过的事实
 
-| 模组 | 分支 | 实际提供 | 不是什么 |
+| 模组 | 分支 / 版本 | 实际提供 | 不是什么 |
 |---|---|---|---|
-| **Create: Diesel Generators** | `1.21.1` | **流体燃料**（柴油/生物柴油/植物油，`CDGTags` 里是 `TagKey<Fluid>`）+ **旋转应力**（`ModularDieselEngineBlockEntity extends GeneratingKineticBlockEntity`） | ❌ 没有 `IEnergyStorage`、❌ 没有受电弓、❌ 没有接触网/第三轨 |
+| **Create: Electro Energetics** | `1.21.1` / `1.21.1-1.2.0` | **真实电气系统**：电线、连接器、蓄电池、变压器、电压仿真，**列车受电弓**。mixin 了 `Train`，经 `ICEETrainExtension#getElectricTrainData()` 暴露 `ElectricTrainData`（`lastVoltage` / `accumulatorCharge` / `pantographs`） | — |
+| **Create: Diesel Generators** | `1.21.1` | **流体燃料**（柴油/生物柴油/植物油，`CDGTags` 里是 `TagKey<Fluid>`）+ **旋转应力**（`ModularDieselEngineBlockEntity extends GeneratingKineticBlockEntity`） | ❌ 没有 `IEnergyStorage`、❌ 没有受电弓、❌ 没有接触网 |
 | **Create: Pantographs & Wires** | `mc/1.21.1` | **纯装饰**接触网与受电弓 | ❌ 不产生、不传输能源 |
 | **Steam 'n' Rails** | `1.21/dev` | **流体燃料**（油罐车） | — |
 
-也就是说：**目前生态里没有任何模组提供"真实电力 + 受电弓受流 + 第三轨"**。
-在这种现实下，API 里写一个 `isElectrified` 布尔值、或者一套「供电制式」注册表，
-不是超前设计，而是**凭空发明一个不存在的模型**。
+**四者的能源模型互不相同**：电压（V）、流体（mB）、应激（SU）、纯装饰。
+
+这正是本 API 不建模电气化的理由——如果 API 里写死一套「供电制式」，
+这四者里至少三个没法接。所以只保留一个问题：**这车现在还能不能给牵引。**
+
+> 顺带一提 Electro Energetics 的电压门限来自它的 `CVoltages`：
+> `trainMinVoltage = 1900`、`trainMaxVoltage = 5000`（默认值，服主可改）。
+> 低于最小电压 = 无牵引——这是**它的**规则，不是我们的。
 
 ### 3.3 联动接口
 
@@ -192,30 +198,62 @@ if (!train.energy().canTraction()) { ... }
 
 「电还有一半但油见底」→ 正确判成 `LOW`。
 
-### 3.6 想加一个能源模组的适配器
+### 3.6 写一个适配器：以 Electro Energetics 为例
 
 ```java
 Interop.registerEnergyProvider(new EnergyProvider() {
-    private static final ResourceLocation ID = rl("mymod", "diesel_generators");
+    private static final ResourceLocation ID = rl("mymod", "electro_energetics");
 
     @Override public ResourceLocation id() { return ID; }
-    @Override public String modId() { return "createdieselgenerators"; }
+    @Override public String modId() { return Interop.Known.ELECTRO_ENERGETICS; }
 
     @Override
-    public EnergySample sample(Telemetry.TrainState train) {
-        // 从对方模组的流体罐里取，转成 EnergySample
-        double litres = MyAdapter.readFuel(train.id());
-        if (litres < 0) return EnergySample.notApplicable();   // 这车不归我管
-        double pct = litres / MyAdapter.tankSize(train.id());
-        return pct < 0.15
-            ? EnergySample.low(pct, Component.literal("燃料偏低"))
-            : EnergySample.available(pct);
+    public EnergySample sample(Telemetry.TrainState state) {
+        Train train = Create.RAILWAYS.trains.get(state.id());
+        if (train == null) return EnergySample.unknown();
+
+        // 它 mixin 了 Train，所以可以直接转型
+        ElectricTrainData data = ((ICEETrainExtension) train).getElectricTrainData();
+        if (data == null) return EnergySample.notApplicable();
+
+        // 有受电弓且电压够 = 能从接触网取流
+        boolean pantographUp = data.pantographs.stream().anyMatch(p -> p.active);
+        boolean live = pantographUp && data.lastVoltage >= Interop.Known.EE_TRAIN_MIN_VOLTAGE;
+
+        // 蓄电池兜底（单位：库仑）
+        double stored = data.accumulatorCharge;
+        double capacity = data.accumulators * 360000.0;   // maxAccumulatorCharge 默认值
+        double pct = capacity <= 0 ? 0 : Math.min(1, stored / capacity);
+
+        Map<ResourceLocation, Double> gauges = Map.of(
+            rl("electroenergetics", "voltage"), data.lastVoltage,     // V
+            rl("electroenergetics", "charge"),  stored);              // C
+
+        if (live) return new EnergySample(Status.AVAILABLE, 1.0, gauges, null);
+        if (pct > 0) return new EnergySample(pct < 0.15 ? Status.LOW : Status.AVAILABLE,
+                                             pct, gauges, null);
+        return new EnergySample(Status.DEPLETED, 0, gauges,
+                                Component.literal("无受电、无蓄电"));
     }
 });
 ```
 
+同样的形状能套到流体燃料上：
+
+```java
+@Override
+public EnergySample sample(Telemetry.TrainState state) {
+    double millibuckets = MyFluidAdapter.readTank(state.id(), RAILWAYS_DIESEL);
+    if (millibuckets < 0) return EnergySample.notApplicable();   // 这车不归我管
+    double pct = millibuckets / MyFluidAdapter.tankCapacity(state.id());
+    return pct < 0.15
+        ? EnergySample.low(pct, Component.literal("燃料偏低"))
+        : EnergySample.available(pct);
+}
+```
+
 **注意 `notApplicable()` 与 `UNKNOWN` 的区别**：前者是「这车不用我的能源」（电力车遇到燃料提供方），
-后者是「我不知道」。前者不参与合并，后者也不参与——但语义不同，排障时看得出来。
+后者是「我不知道」。两者都不参与合并——但排障时含义完全不同。
 
 ---
 

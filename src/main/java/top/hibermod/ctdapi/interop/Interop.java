@@ -176,43 +176,59 @@ public final class Interop {
     // ── 内置档案 ──────────────────────────────────────────────────────────
 
     /**
-     * 内置的联动档案：已确认过的三个燃料 / 接触网来源。
+     * 内置的联动档案：已核对过源码的四个能源 / 接触网来源。
      *
      * <p>这些**只是说明**，不会自动注册适配器——适配器由宿主或联动方自己提供。
      * 列在这里是为了 {@link top.hibermod.ctdapi.ApiCatalog} 能打印出一份「应该装什么」的清单。
      *
-     * <p>⚠ 核对过源码的事实（分支见各条注释）：
+     * <p>⚠ 核对过源码的事实（分支与版本见各条注释）：
      * <ul>
-     *   <li><b>Create: Diesel Generators</b>（`1.21.1`）—— 提供的是**流体燃料**
-     *       （柴油 / 生物柴油 / 植物油，见 {@code CDGTags} 的 {@code TagKey<Fluid>}）
+     *   <li><b>Create: Electro Energetics</b>（`1.21.1`，`1.21.1-1.2.0`）—— 真正的**电气系统**：
+     *       电线、连接器、蓄电池、变压器、电压仿真，以及**列车受电弓**。
+     *       它 mixin 了 {@code Train}，通过 {@code ICEETrainExtension#getElectricTrainData()}
+     *       暴露 {@code ElectricTrainData}，里面有 {@code lastVoltage}、{@code accumulatorCharge}、
+     *       {@code pantographs}。**这是目前唯一能给出真实牵引电压的模组。**</li>
+     *   <li><b>Create: Diesel Generators</b>（`1.21.1`）—— 提供**流体燃料**
+     *       （柴油 / 生物柴油 / 植物油，{@code CDGTags} 里是 {@code TagKey<Fluid>}）
      *       与**旋转应力**（{@code ModularDieselEngineBlockEntity extends GeneratingKineticBlockEntity}）。
      *       它**没有** {@code IEnergyStorage}、没有受电弓、没有接触网。</li>
      *   <li><b>Create: Pantographs &amp; Wires</b>（`mc/1.21.1`）—— 纯装饰接触网与受电弓。</li>
      *   <li><b>Steam 'n' Rails</b> —— 流体燃料（油罐车）。</li>
      * </ul>
-     * 也就是说：**目前生态里没有任何模组提供"真实电力 + 受电弓受流 + 第三轨"**。
-     * 这正是 {@link Capability#POWER} 只作为预留能力存在的原因——不要假设它一定有人提供。
      */
     public static final class Known {
         private Known() {}
 
+        public static final String ELECTRO_ENERGETICS = "electroenergetics";
         public static final String DIESEL_GENERATORS = "createdieselgenerators";
         public static final String PANTOGRAPHS_AND_WIRES = "pantographsandwires";
         public static final String RAILWAYS = "railways";
 
+        /** Electro Energetics 的电压门限（默认值，来自其 {@code CVoltages}）。 */
+        public static final double EE_TRAIN_MIN_VOLTAGE = 1900.0;
+        public static final double EE_TRAIN_MAX_VOLTAGE = 5000.0;
+
         public static void bootstrap() {
             describe(new Target(
-                DIESEL_GENERATORS,
-                "Create: Diesel Generators",
-                Capability.FLUID_FUEL,
-                "流体燃料（柴油/生物柴油/植物油）。燃料量以流体 id 为键放进 gauges。",
+                ELECTRO_ENERGETICS,
+                "Create: Electro Energetics",
+                Capability.POWER,
+                "真实电气系统 + 列车受电弓。经 ICEETrainExtension#getElectricTrainData() 读 lastVoltage / "
+                    + "accumulatorCharge；电压低于 trainMinVoltage(默认 1900V) 即无牵引。",
+                null));
+
+            describe(new Target(
+                ELECTRO_ENERGETICS,
+                "Create: Electro Energetics",
+                Capability.ENERGY_STORAGE,
+                "车载蓄电池（accumulators / accumulatorCharge，单位库仑）。",
                 null));
 
             describe(new Target(
                 DIESEL_GENERATORS,
                 "Create: Diesel Generators",
-                Capability.SOLID_FUEL,
-                "燃料物品形态（油桶等）。",
+                Capability.FLUID_FUEL,
+                "流体燃料（柴油/生物柴油/植物油）。燃料量以流体 id 为键放进 gauges。",
                 null));
 
             describe(new Target(
