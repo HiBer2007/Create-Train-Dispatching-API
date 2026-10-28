@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.Objects;
 
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 
 /**
@@ -58,6 +59,57 @@ public final class Rail {
 
         @Override
         public int compareTo(NodeId o) { return ORDER.compare(this, o); }
+
+        // ── 字符串编解码 ──────────────────────────────────────────────────
+
+        /**
+         * 稳定字符串形式：{@code namespace:path@x2,y2,z2,offset}。
+         *
+         * <p>用于脚本、配置、日志与网络传输——这些场合都没法传 Java 对象。
+         * 格式一旦发布**不可更改**：改了会让存档里的脚本配置全部失联。
+         */
+        public String encode() {
+            return dimension.location()
+                + "@" + x2 + "," + y2 + "," + z2 + "," + yOffsetPixels;
+        }
+
+        /**
+         * 解析 {@link #encode()} 的产物。
+         *
+         * @throws IllegalArgumentException 格式不合法
+         */
+        public static NodeId decode(String s) {
+            if (s == null) throw new IllegalArgumentException("node id is null");
+            int at = s.lastIndexOf('@');
+            if (at <= 0) throw new IllegalArgumentException("missing '@' in node id: " + s);
+
+            ResourceLocation dim = ResourceLocation.tryParse(s.substring(0, at));
+            if (dim == null) throw new IllegalArgumentException("bad dimension in node id: " + s);
+
+            String[] parts = s.substring(at + 1).split(",");
+            if (parts.length != 4) {
+                throw new IllegalArgumentException("expected 4 coordinates in node id: " + s);
+            }
+            try {
+                return new NodeId(
+                    ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, dim),
+                    Integer.parseInt(parts[0]),
+                    Integer.parseInt(parts[1]),
+                    Integer.parseInt(parts[2]),
+                    Integer.parseInt(parts[3]));
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("bad number in node id: " + s, e);
+            }
+        }
+
+        /** 宽松解析：格式不合法时返回 {@code null}，不抛异常。 */
+        public static NodeId tryDecode(String s) {
+            try {
+                return decode(s);
+            } catch (RuntimeException e) {
+                return null;
+            }
+        }
     }
 
     /**
@@ -93,6 +145,42 @@ public final class Rail {
         public int compareTo(EdgeId o) {
             int c = first.compareTo(o.first);
             return c != 0 ? c : second.compareTo(o.second);
+        }
+
+        // ── 字符串编解码 ──────────────────────────────────────────────────
+
+        /**
+         * 稳定字符串形式：{@code <node>|<node>}。
+         *
+         * <p>{@code |} 不会出现在 {@code ResourceLocation} 或坐标里，可以安全当分隔符。
+         */
+        public String encode() {
+            return first.encode() + "|" + second.encode();
+        }
+
+        /**
+         * 解析 {@link #encode()} 的产物。
+         *
+         * @throws IllegalArgumentException 格式不合法
+         */
+        public static EdgeId decode(String s) {
+            if (s == null) throw new IllegalArgumentException("edge id is null");
+            int bar = s.indexOf('|');
+            if (bar <= 0 || bar == s.length() - 1) {
+                throw new IllegalArgumentException("expected '<node>|<node>' in edge id: " + s);
+            }
+            return new EdgeId(
+                NodeId.decode(s.substring(0, bar)),
+                NodeId.decode(s.substring(bar + 1)));
+        }
+
+        /** 宽松解析：格式不合法时返回 {@code null}。 */
+        public static EdgeId tryDecode(String s) {
+            try {
+                return decode(s);
+            } catch (RuntimeException e) {
+                return null;
+            }
         }
     }
 
