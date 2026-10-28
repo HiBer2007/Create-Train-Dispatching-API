@@ -43,6 +43,17 @@ public interface DispatchFrame {
     /** 发布一条事件（会进入 PIS 总线与日志）。 */
     void event(RailwayEvent event);
 
+    /**
+     * 指派车次：让一组车组开行某个具体车次。
+     *
+     * <p><b>默认空实现</b>，理由与其他可选通道一致：不支持的宿主不该因此编译不过。
+     * 支持指派是宿主的**能力**，不是义务。
+     *
+     * <p>落地语义由宿主决定：可能只是记下来供调度算法查询，
+     * 也可能真的去改 {@code ScheduleRuntime} 与自动出库。内核不该假设是哪种。
+     */
+    default void assign(top.hibermod.ctdapi.operation.Assignment assignment) { }
+
     // ── 便捷方法 ──────────────────────────────────────────────────────────
 
     /** 让列车停车（授权 0）。{@code reason} 进 PIS。 */
