@@ -150,35 +150,31 @@ public final class Command {
      */
     public record DeviceCommand(java.util.UUID deviceId, net.minecraft.nbt.CompoundTag payload, long holder) {}
 
-    // ── 牵引 / 补给 ───────────────────────────────────────────────────────
-
-    /** 受电与供电切换动作。 */
-    public enum PowerAction {
-        /** 升起受电弓（进入电气化区段前）。 */
-        RAISE_PANTOGRAPH,
-        /** 降下受电弓（离开电气化区段 / 无电区段）。 */
-        LOWER_PANTOGRAPH,
-        /** 切断牵引（应急 / 检修）。 */
-        CUT_OFF,
-        /** 恢复牵引。 */
-        RESTORE
-    }
+    // ── 能源 / 补给 ───────────────────────────────────────────────────────
 
     /**
-     * 对某列车供电系统的指令。
+     * 发给**能源联动方**的指令（升弓、切供电、加注……）。
      *
-     * <p>为什么单独一条而不是塞进 {@link TrainCommand}：受电弓动作有**物理延迟与区间约束**
-     * （不能带弓进入无电区），必须能被宿主单独排队、单独失败，而不是和速度指令混在一起。
+     * <p>本 API **不解释** {@code payload}——受电弓、第三轨、流体燃料的语义属于联动模组。
+     * 我们只负责把「谁、对哪台车、想做什么」原样送到
+     * {@link top.hibermod.ctdapi.interop.Interop#energyProvider} 手上。
      *
-     * @param trainId 目标列车
-     * @param action  动作
+     * @param trainId    目标列车
+     * @param providerId 目标联动方 id（见 {@link top.hibermod.ctdapi.interop.EnergyProvider#id()}）
+     * @param payload    指令内容，结构由联动方定义
+     * @param holder     发起者，用于审计
      */
-    public record PowerCommand(java.util.UUID trainId, PowerAction action) {}
+    public record EnergyCommand(
+        java.util.UUID trainId,
+        ResourceLocation providerId,
+        net.minecraft.nbt.CompoundTag payload,
+        long holder
+    ) {}
 
     /**
      * 对某列车执行**一次地面补给**（加油 / 充电 / 上水 / 清空）。
      *
-     * <p>由 ATO 在燃料或电量低于阈值时发起，宿主转成对补给设备的调用。
+     * <p>由 ATO 在能源余量偏低时发起，宿主转成对补给设备的调用。
      * {@code serviceId} 由设备实现解释（建议用 {@code ctdapi:refuel} / {@code ctdapi:charge}
      * 这类约定名，也可以自定义）。
      *

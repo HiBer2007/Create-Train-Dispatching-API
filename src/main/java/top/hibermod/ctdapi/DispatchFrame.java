@@ -28,8 +28,8 @@ public interface DispatchFrame {
     /** 提交一条普通设备指令（地面 / 车载）。 */
     void device(Command.DeviceCommand command);
 
-    /** 提交一条受电/供电切换指令。 */
-    void power(Command.PowerCommand command);
+    /** 提交一条能源指令（转交联动方执行）。 */
+    void energy(Command.EnergyCommand command);
 
     /** 提交一条补给指令（加油 / 充电 / 上水）。 */
     void service(Command.ServiceCommand command);

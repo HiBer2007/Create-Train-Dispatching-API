@@ -12,6 +12,7 @@ import net.minecraft.resources.ResourceLocation;
 import top.hibermod.ctdapi.KernelEnv;
 import top.hibermod.ctdapi.Rail;
 import top.hibermod.ctdapi.Telemetry;
+import top.hibermod.ctdapi.interop.EnergyProvider;
 import top.hibermod.ctdapi.status.Emergency;
 import top.hibermod.ctdapi.status.Restrictions;
 import top.hibermod.ctdapi.traction.Traction;
@@ -65,7 +66,7 @@ public interface AtoEngine {
      *
      * @param gameTime         服务端游戏刻
      * @param train            列车实时状态
-     * @param power            牵引能量状态（燃料 / 电量 / 受电状态）
+     * @param energy           能源状态（电力 / 燃料），来自联动方；未知时视为可牵引
      * @param speedClass       本趟车次的速度等级；未知时为 {@code null}（此时按授权与信号限速）
      * @param authority        当前距离授权（格）
      * @param permittedSpeed   信号侧给出的限速（格/tick），已含信号机限速
@@ -79,7 +80,7 @@ public interface AtoEngine {
     record Context(
         long gameTime,
         Telemetry.TrainState train,
-        Traction.PowerState power,
+        EnergyProvider.EnergySample energy,
         @Nullable Traction.SpeedClass speedClass,
         double authority,
         double permittedSpeed,
@@ -114,9 +115,9 @@ public interface AtoEngine {
             return !emergencies.isEmpty();
         }
 
-        /** 还能不能牵引（没电/没油时 ATO 必须请求补给）。 */
+        /** 还能不能牵引（由联动方给出的能源状态决定；未知时视为可以）。 */
         public boolean canTraction() {
-            return power.canTraction();
+            return energy.canTraction();
         }
     }
 

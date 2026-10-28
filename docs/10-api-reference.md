@@ -106,7 +106,8 @@ top.hibermod.ctdapi
 ├── ApiCatalog              ★ 统一索引（有哪些、该用哪个）
 ├── signal/                 信号系统
 ├── ato/                    ATO 引擎（绑定信号制度）
-├── traction/               牵引方式 / 速度等级 / 燃料 / 供电
+├── traction/               牵引标签 / 速度等级
+├── interop/                能源联动（电力、燃料由别的模组提供）
 ├── status/                 临时限制与应急
 ├── device/                 设备（地面 / 车载）
 ├── timetable/              交路（时刻表对外可见的那一层）

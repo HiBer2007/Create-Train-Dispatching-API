@@ -11,6 +11,8 @@ import top.hibermod.ctdapi.ato.AtoEngine;
 import top.hibermod.ctdapi.ato.AtoEngines;
 import top.hibermod.ctdapi.device.Devices;
 import top.hibermod.ctdapi.hud.Hud;
+import top.hibermod.ctdapi.interop.EnergyProvider;
+import top.hibermod.ctdapi.interop.Interop;
 import top.hibermod.ctdapi.pis.Pis;
 import top.hibermod.ctdapi.signal.Aspect;
 import top.hibermod.ctdapi.signal.LampColor;
@@ -48,8 +50,8 @@ public final class ApiCatalog {
         ATO_ENGINE,
         TRACTION_TYPE,
         SPEED_CLASS,
-        FUEL,
-        POWER_SUPPLY,
+        ENERGY_PROVIDER,
+        INTEROP_TARGET,
         GROUND_DEVICE,
         ONBOARD_DEVICE,
         HUD_PANEL,
@@ -103,20 +105,26 @@ public final class ApiCatalog {
                 "绑定信号制度 " + a.signalSystemId().getPath()));
         }
         for (Traction.TractionType t : Traction.types()) {
-            out.add(new Entry(Category.TRACTION_TYPE, t.id(), t.displayName(),
-                (t.needsExternalSupply() ? "需外部供电" : "")
-                    + (t.needsExternalSupply() && t.needsFuel() ? " / " : "")
-                    + (t.needsFuel() ? "需自带燃料" : "")));
+            out.add(new Entry(Category.TRACTION_TYPE, t.id(), t.displayName(), "牵引标签"));
         }
         for (Traction.SpeedClass s : Traction.speedClasses()) {
             out.add(new Entry(Category.SPEED_CLASS, s.id(), s.displayName(),
                 "上限 " + s.maxSpeed() + " 格/tick / rank " + s.rank()));
         }
-        for (Traction.FuelType f : Traction.fuels()) {
-            out.add(new Entry(Category.FUEL, f.id(), f.displayName(), "能量当量 " + f.energyPerUnit()));
+
+        for (EnergyProvider p : Interop.energyProviders()) {
+            out.add(new Entry(Category.ENERGY_PROVIDER, p.id(),
+                Component.literal(p.modId()),
+                "能源联动 / " + (Interop.isLoaded(p.modId()) ? "已加载" : "未加载")));
         }
-        for (Traction.PowerSupply p : Traction.supplies()) {
-            out.add(new Entry(Category.POWER_SUPPLY, p.id(), p.displayName(), "供电制式"));
+        for (Interop.Target t : Interop.targets()) {
+            out.add(new Entry(Category.INTEROP_TARGET,
+                ResourceLocation.fromNamespaceAndPath(
+                    t.modId().contains(":") ? t.modId().split(":")[0] : "interop",
+                    t.modId().replace(':','_') + "/" + t.capability().name().toLowerCase(java.util.Locale.ROOT)),
+                Component.literal(t.name()),
+                t.capability() + (Interop.isLoaded(t.modId()) ? " / 已加载" : " / 未加载")
+                    + " — " + t.note()));
         }
 
         for (Devices.DeviceType d : Devices.of(Devices.Kind.GROUND)) {
@@ -186,11 +194,13 @@ public final class ApiCatalog {
         Devices.freeze();
         Hud.freeze();
         Pis.freeze();
+        Interop.freeze();
     }
 
     /** 是否全部注册表都已冻结。 */
     public static boolean allFrozen() {
         return SignalRegistries.frozen() && AtoEngines.frozen() && Traction.frozen()
-            && Service.frozen() && Devices.frozen() && Hud.frozen() && Pis.frozen();
+            && Service.frozen() && Devices.frozen() && Hud.frozen() && Pis.frozen()
+            && Interop.frozen();
     }
 }

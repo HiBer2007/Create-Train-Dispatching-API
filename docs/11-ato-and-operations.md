@@ -16,6 +16,9 @@ ATO 回答「**怎么走**」——给多少牵引、什么时候制动、在哪
 运营状态（封路、施工、应急）则是第三个维度：它不改变「怎么操纵」，
 而是**改变前提**——路没了、线断了、要停车疏散。
 
+第四件事是**能源**：电力、燃料、受电弓。它同样不是我们的模型——
+由其他模组提供，我们只做**联动**（§3–§5）。
+
 ---
 
 ## 1. ATO 与信号引擎的配对
@@ -115,128 +118,150 @@ Service.builder(rl("mymod", "g1"))
 
 ---
 
-## 3. 电气化与非电气化
+## 3. 电气化 / 燃料 —— 这两件事**不属于本 API**
 
-### 3.1 别把它做成一个布尔值
+### 3.1 结论先行
 
-「电气化 vs 非电气化」其实是**两个独立事实**：
+电力、受电弓、第三轨、流体燃料，全部由**其他模组**提供。本 API 不建模它们，
+只提供一个**联动接口**，让 ATO 能问出一句话：
 
-| 事实 | 属于谁 | 字段 |
+> 「这列车现在还能不能给牵引？」
+
+### 3.2 核对过的事实
+
+| 模组 | 分支 | 实际提供 | 不是什么 |
+|---|---|---|---|
+| **Create: Diesel Generators** | `1.21.1` | **流体燃料**（柴油/生物柴油/植物油，`CDGTags` 里是 `TagKey<Fluid>`）+ **旋转应力**（`ModularDieselEngineBlockEntity extends GeneratingKineticBlockEntity`） | ❌ 没有 `IEnergyStorage`、❌ 没有受电弓、❌ 没有接触网/第三轨 |
+| **Create: Pantographs & Wires** | `mc/1.21.1` | **纯装饰**接触网与受电弓 | ❌ 不产生、不传输能源 |
+| **Steam 'n' Rails** | `1.21/dev` | **流体燃料**（油罐车） | — |
+
+也就是说：**目前生态里没有任何模组提供"真实电力 + 受电弓受流 + 第三轨"**。
+在这种现实下，API 里写一个 `isElectrified` 布尔值、或者一套「供电制式」注册表，
+不是超前设计，而是**凭空发明一个不存在的模型**。
+
+### 3.3 联动接口
+
+```java
+public interface EnergyProvider {
+    ResourceLocation id();
+    String modId();                                   // "createdieselgenerators"
+    EnergySample sample(TrainState train);            // 这车现在还能不能跑
+    default void apply(Command.EnergyCommand cmd) {}  // 可选：接受指令
+}
+```
+
+```java
+public record EnergySample(
+    Status status,                       // UNKNOWN / AVAILABLE / LOW / DEPLETED / NOT_APPLICABLE
+    double fraction,                     // 0..1 粗余量
+    Map<ResourceLocation, Double> gauges, // ★ 开放键值：燃料量、电压、蒸汽压力…
+    @Nullable Component summary
+)
+```
+
+**`gauges` 是开放键值，不是一个燃料枚举。** 汽鸣铁道给的是流体，键就是流体 id：
+
+```java
+Map.of(ResourceLocation.parse("railways:diesel"), 320.0)
+```
+
+Create Diesel Generators 同理（`createadieselgenerators:diesel` 之类），
+以后真有电力模组了，键可以是 `mymod:voltage`、`mymod:charge`。
+**API 永远不需要知道这些键是什么意思**，它只负责搬运。
+
+### 3.4 铁律：`UNKNOWN` ≠ `DEPLETED`
+
+```java
+if (!train.energy().canTraction()) { ... }
+```
+
+- 没有装任何联动模组 → `UNKNOWN` → `canTraction() == true` → **不干预**；
+- 装了但适配器出错 → 抛异常会被吞掉 → 仍然是 `UNKNOWN` → 不干预；
+- 真的没油/没电 → `DEPLETED` → `canTraction() == false`。
+
+**把「不知道」当成「没电」，会让所有没装能源模组的存档里列车集体趴窝。**
+这是这个接口最容易写错的一处。
+
+### 3.5 多个来源会合并
+
+混合动力车同时有电和油，两个 provider 各给一份采样：
+
+```
+合并规则：状态取最坏、余量取最小、指标取并集
+```
+
+「电还有一半但油见底」→ 正确判成 `LOW`。
+
+### 3.6 想加一个能源模组的适配器
+
+```java
+Interop.registerEnergyProvider(new EnergyProvider() {
+    private static final ResourceLocation ID = rl("mymod", "diesel_generators");
+
+    @Override public ResourceLocation id() { return ID; }
+    @Override public String modId() { return "createdieselgenerators"; }
+
+    @Override
+    public EnergySample sample(Telemetry.TrainState train) {
+        // 从对方模组的流体罐里取，转成 EnergySample
+        double litres = MyAdapter.readFuel(train.id());
+        if (litres < 0) return EnergySample.notApplicable();   // 这车不归我管
+        double pct = litres / MyAdapter.tankSize(train.id());
+        return pct < 0.15
+            ? EnergySample.low(pct, Component.literal("燃料偏低"))
+            : EnergySample.available(pct);
+    }
+});
+```
+
+**注意 `notApplicable()` 与 `UNKNOWN` 的区别**：前者是「这车不用我的能源」（电力车遇到燃料提供方），
+后者是「我不知道」。前者不参与合并，后者也不参与——但语义不同，排障时看得出来。
+
+---
+
+## 4. 燃料就是 `gauges` 里的一个键
+
+没有 `FuelType` 注册表了。原因很直接：
+
+- 汽鸣铁道的燃料是**流体**；
+- Diesel Generators 的燃料也是**流体**（`TagKey<Fluid>`）；
+- 将来可能有模组用**物品**当燃料。
+
+API 定义一套「燃料种类」的注册表，等于要求这三种实现按同一个抽象来长。
+所以只留 `Map<ResourceLocation, Double>`，键交给联动方。
+
+如果确实需要「把燃料折算成续航里程」，那是 **ATO 自己的事**，写在你自己的配置里：
+
+```java
+// 在你自己的 ATO 实现里
+double rangeKm = ctx.energy().gauges().getOrDefault(DIESEL, 0.0) * 1.8;
+```
+
+---
+
+## 5. 联控：指令怎么送到联动方
+
+两条通道，别混：
+
+| 通道 | 用途 | 谁解释内容 |
 |---|---|---|
-| 这列车靠什么产生动力 | 车 | `TractionType.needsExternalSupply` / `needsFuel` |
-| 这段线路现在有没有电 | 线路 | `PowerState.externalSupplyLive` |
-
-把二者合成一个 `isElectrified` 布尔值，混合动力车、无电区段、受电弓升降就都没法表达。
+| `Command.EnergyCommand` | 升弓、切供电、加注 | **联动方**（`EnergyProvider.apply`） |
+| `Command.ServiceCommand` | 找地面设备补给（加油柱、充电桩） | **设备实现** |
 
 ```java
-public record TractionType(ResourceLocation id, Component displayName,
-                           boolean needsExternalSupply,   // 必须是电力
-                           boolean needsFuel,             // 必须自带燃料
-                           boolean canUseExternalSupply)  // 可选受电（混合动力）
+// 交给联动方
+out.energy(new Command.EnergyCommand(trainId, rl("mymod","diesel_generators"), payload, holder));
+
+// 交给地面补给设备
+out.service(new Command.ServiceCommand(trainId, deviceId, rl("ctdapi","refuel"), params, holder));
 ```
 
-内置：`electric`（需供电）、`diesel`（需燃料）、`steam`（需燃料）、`hybrid`（两者皆可）。
+两者的区别：**前者是车上的能源系统，后者是地面设施**。
+受电弓是有物理延迟与区间约束的车载动作，属于前者；加油柱是站场设施，属于后者。
 
-### 3.2 一列车的能量状态
+补给设施仍然走设备能力标签：`fuel-port` / `charger` / `water-port`。
 
-```java
-public record PowerState(
-    ResourceLocation tractionTypeId,
-    boolean externalSupplyLive,     // 当前所在位置有电（受电弓升起 / 第三轨带电）
-    double fuel, double fuelCapacity, ResourceLocation fuelId,
-    double energy, double energyCapacity,
-    boolean pantographRaised
-) {
-    boolean canTraction();          // ★ ATO 每次决策前先问这个
-    boolean needsRefill(double threshold);
-    double estimatedRange(double energyPerBlock);
-}
-```
-
-### 3.3 ATO 必须处理「跑不动了」
-
-`canTraction() == false` 时，牵引再大也没用。正确顺序是：
-
-```java
-if (!ctx.canTraction()) {
-    return Decision.stop("no traction power");
-}
-if (ctx.power().needsRefill(0.15) && approachingDepot) {
-    return new Decision(0.4, 0, speed, DoorAction.NONE, false,
-        new ServiceRequest(rl("ctdapi", "refuel"), null),
-        Component.literal("low fuel, requesting refill"));
-}
-```
-
----
-
-## 4. 燃料
-
-```java
-public record FuelType(ResourceLocation id, Component displayName, double energyPerUnit) {}
-```
-
-`energyPerUnit` 用来把燃料折算成里程，让 ATO 能提前决定「这趟要不要先去加油」：
-
-```java
-double range = ctx.power().estimatedRange(0.02);   // 每格消耗 0.02 单位
-if (range < ctx.authority()) return Decision.stop("insufficient fuel for the route");
-```
-
-燃料与电量**分开记**：内燃车用 `fuel`，电力车用 `energy`，混合动力两者都有。
-合成一个「能量」字段会在换挂、补燃料、升弓降弓时算错。
-
----
-
-## 5. 联控：地面设备与补给设备
-
-### 5.1 补给设施就是普通地设备
-
-不需要新机制，用能力标签即可：
-
-| 标签 | 含义 |
-|---|---|
-| `fuel-port` | 燃料加注口 |
-| `charger` | 充电 / 供电轨段 |
-| `water-port` | 上水口 |
-| `pantograph` | 受电弓（车载） |
-
-```java
-Devices.register(new Devices.DeviceType(
-    rl("mymod", "diesel_pump"),
-    Component.literal("柴油加注柱"),
-    Devices.Kind.GROUND,
-    Set.of(Devices.Capabilities.FUEL_PORT),
-    true));                                   // 可命令
-```
-
-### 5.2 两条联控指令
-
-```java
-// 补给：ATO 发起，宿主转交设备
-out.service(new Command.ServiceCommand(trainId, deviceId /* 可 null */,
-    rl("ctdapi", "refuel"), params, holder));
-
-// 供电：受电弓与牵引通断
-out.power(new Command.PowerCommand(trainId, Command.PowerAction.RAISE_PANTOGRAPH));
-```
-
-**为什么受电弓要单列一条指令**：它有物理延迟与区间约束（不能带弓进入无电区）。
-塞进 `TrainCommand` 会和速度指令混在一起，既没法单独排队，也没法单独失败。
-
-### 5.3 宿主侧的联控顺序
-
-```
-ATO: 电量低 → ServiceRequest(charge)
-  ↓
-宿主: 找附近 charger 设备 → 调度把车引导到该设备 → 停车
-  ↓
-宿主: out.service(ServiceCommand) → 设备实现执行
-  ↓
-宿主: 更新 Telemetry.TrainState.power → 下一帧 ATO 看到电量回升
-```
-
-注意：**ATO 不负责把车开到充电桩**。它只发请求；引导是调度引擎的进路问题。
+> ATO 不负责把车开到加油柱。它只发请求，引导是调度引擎的进路问题。
 
 ---
 
@@ -347,20 +372,25 @@ new Pis.BoardEntry(
 
 | 类别 | 注册方法 | 校验 |
 |---|---|---|
-| 牵引方式 | `Traction.registerTraction` | 重复即抛 |
+| 牵引标签 | `Traction.registerTraction` | 重复即抛 |
 | 速度等级 | `Traction.registerSpeedClass` | 重复即抛；`maxSpeed > 0` |
-| 燃料 | `Traction.registerFuel` | 重复即抛 |
-| 供电制式 | `Traction.registerPowerSupply` | 重复即抛 |
+| 能源联动方 | `Interop.registerEnergyProvider` | 重复即抛 |
+| 联动档案 | `Interop.describe` | 需要 modId |
 | ATO | `AtoEngines.register` | freeze 时校验制度存在且唯一 |
 | 交路 | `Service.register` | freeze 时校验制度与速度等级存在 |
+
+**没有**燃料注册表、**没有**供电制式注册表——见 §3、§4。
 
 `ApiCatalog.freezeAll()` 的冻结顺序：
 
 ```
-信号 → ATO → 牵引 → 交路 → 设备 → HUD → PIS
+信号 → ATO → 牵引 → 交路 → 设备 → HUD → PIS → 联动
 ```
 
-`ApiCatalog.entries()` 新增类别：`ATO_ENGINE` / `TRACTION_TYPE` / `SPEED_CLASS` / `FUEL` / `POWER_SUPPLY`。
+`ApiCatalog.entries()` 新增类别：`ATO_ENGINE` / `TRACTION_TYPE` / `SPEED_CLASS` / `ENERGY_PROVIDER` / `INTEROP_TARGET`。
+
+> `INTEROP_TARGET` 只打印「这个模组应该装、装没装」，不参与任何决策。
+> 它的用处是启动时一眼看出「Ato 说没能源信息，原来是没装联动模组」。
 
 ---
 
@@ -404,11 +434,11 @@ public final class SimpleAto implements AtoEngine {
             return new Decision(0, 1, 0, doors, true, null, Component.literal("arrived"));
         }
 
-        // ⑦ 低于余量就去补给
-        if (in.power().needsRefill(0.15)) {
+        // ⑦ 余量偏低就去补给（能源状态来自联动方，未知时 needsRefill() 为 false）
+        if (in.energy().needsRefill()) {
             return new Decision(0.3, 0, target, DoorAction.NONE, false,
                 new ServiceRequest(rl("ctdapi", "refuel"), null),
-                Component.literal("low fuel"));
+                Component.literal("low energy"));
         }
 
         double dv = target - in.train().speed();

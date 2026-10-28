@@ -63,7 +63,7 @@ public interface Telemetry {
         double odometer,
         RouteState route,
         double authority,
-        top.hibermod.ctdapi.traction.Traction.PowerState power,
+        top.hibermod.ctdapi.interop.EnergyProvider.EnergySample energy,
         java.util.Set<ResourceLocation> signalSystems
     ) {
         /**
