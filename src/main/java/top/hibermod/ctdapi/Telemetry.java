@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * 每帧的**列车实时状态**。只读，由宿主从 Create 的 {@code Train} 采样后构造。
@@ -61,7 +62,9 @@ public interface Telemetry {
         boolean derailed,
         double odometer,
         RouteState route,
-        double authority
+        double authority,
+        top.hibermod.ctdapi.traction.Traction.PowerState power,
+        java.util.Set<ResourceLocation> signalSystems
     ) {
         /**
          * 以 {@code v} 的速度在距离 {@code d} 内刹停所需时间的近似（格/tick²）。

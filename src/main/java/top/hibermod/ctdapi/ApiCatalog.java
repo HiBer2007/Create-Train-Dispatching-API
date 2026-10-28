@@ -7,6 +7,8 @@ import java.util.Optional;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
+import top.hibermod.ctdapi.ato.AtoEngine;
+import top.hibermod.ctdapi.ato.AtoEngines;
 import top.hibermod.ctdapi.device.Devices;
 import top.hibermod.ctdapi.hud.Hud;
 import top.hibermod.ctdapi.pis.Pis;
@@ -16,6 +18,7 @@ import top.hibermod.ctdapi.signal.SignalRegistries;
 import top.hibermod.ctdapi.signal.SignalSystem;
 import top.hibermod.ctdapi.signal.SignalType;
 import top.hibermod.ctdapi.timetable.Service;
+import top.hibermod.ctdapi.traction.Traction;
 
 /**
  * **统一索引**：回答「现在装了哪些东西、执行时该用哪一个」。
@@ -42,6 +45,11 @@ public final class ApiCatalog {
         SIGNAL_TYPE,
         ASPECT,
         LAMP_COLOR,
+        ATO_ENGINE,
+        TRACTION_TYPE,
+        SPEED_CLASS,
+        FUEL,
+        POWER_SUPPLY,
         GROUND_DEVICE,
         ONBOARD_DEVICE,
         HUD_PANEL,
@@ -89,13 +97,36 @@ public final class ApiCatalog {
                 Component.literal("#" + String.format("%06X", c.rgb())), "灯色"));
         }
 
+        for (AtoEngine a : AtoEngines.all()) {
+            out.add(new Entry(Category.ATO_ENGINE, a.id(),
+                Component.literal(a.id().getPath()),
+                "绑定信号制度 " + a.signalSystemId().getPath()));
+        }
+        for (Traction.TractionType t : Traction.types()) {
+            out.add(new Entry(Category.TRACTION_TYPE, t.id(), t.displayName(),
+                (t.needsExternalSupply() ? "需外部供电" : "")
+                    + (t.needsExternalSupply() && t.needsFuel() ? " / " : "")
+                    + (t.needsFuel() ? "需自带燃料" : "")));
+        }
+        for (Traction.SpeedClass s : Traction.speedClasses()) {
+            out.add(new Entry(Category.SPEED_CLASS, s.id(), s.displayName(),
+                "上限 " + s.maxSpeed() + " 格/tick / rank " + s.rank()));
+        }
+        for (Traction.FuelType f : Traction.fuels()) {
+            out.add(new Entry(Category.FUEL, f.id(), f.displayName(), "能量当量 " + f.energyPerUnit()));
+        }
+        for (Traction.PowerSupply p : Traction.supplies()) {
+            out.add(new Entry(Category.POWER_SUPPLY, p.id(), p.displayName(), "供电制式"));
+        }
+
         for (Devices.DeviceType d : Devices.of(Devices.Kind.GROUND)) {
             out.add(new Entry(Category.GROUND_DEVICE, d.id(), d.displayName(),
                 String.join(",", d.capabilities()) + (d.commandable() ? " / 可命令" : " / 只读")));
         }
         for (Devices.DeviceType d : Devices.of(Devices.Kind.ONBOARD)) {
             out.add(new Entry(Category.ONBOARD_DEVICE, d.id(), d.displayName(),
-                String.join(",", d.capabilities()) + (d.commandable() ? " / 可命令" : " / 只读")));
+                String.join(",", d.capabilities()) + (d.commandable() ? " / 可命令" : " / 只读")
+                    + (d.signalSystems().isEmpty() ? "" : " / 信号系统 " + d.signalSystems().size())));
         }
 
         for (Hud.HudPanelSpec h : Hud.specs()) {
@@ -112,6 +143,7 @@ public final class ApiCatalog {
             out.add(new Entry(Category.SERVICE, s.id(), s.code(),
                 (s.line() == null ? "无线路" : s.line().getString())
                     + " / 信号制度 " + s.signalSystemId().getPath()
+                    + (s.speedClassId() == null ? "" : " / 等级 " + s.speedClassId().getPath())
                     + " / 优先级 " + s.priority()));
         }
 
@@ -135,12 +167,21 @@ public final class ApiCatalog {
     /**
      * 冻结全部注册表。宿主在加载完成后调用一次。
      *
-     * <p>顺序有依赖：先冻结信号（交路要校验它引用的制度存在），再冻结交路，最后其余。
+     * <p>顺序有依赖：
+     * <ol>
+     *   <li>信号——交路与 ATO 都要校验它引用的制度存在；</li>
+     *   <li>ATO——必须能查到自己的信号制度；</li>
+     *   <li>牵引——独立；</li>
+     *   <li>交路——引用信号制度与速度等级；</li>
+     *   <li>其余。</li>
+     * </ol>
      *
      * @throws IllegalStateException 任一注册表校验失败时抛出
      */
     public static void freezeAll() {
         SignalRegistries.freeze();
+        AtoEngines.freeze();
+        Traction.freeze();
         Service.freeze();
         Devices.freeze();
         Hud.freeze();
@@ -149,7 +190,7 @@ public final class ApiCatalog {
 
     /** 是否全部注册表都已冻结。 */
     public static boolean allFrozen() {
-        return SignalRegistries.frozen() && Service.frozen()
-            && Devices.frozen() && Hud.frozen() && Pis.frozen();
+        return SignalRegistries.frozen() && AtoEngines.frozen() && Traction.frozen()
+            && Service.frozen() && Devices.frozen() && Hud.frozen() && Pis.frozen();
     }
 }

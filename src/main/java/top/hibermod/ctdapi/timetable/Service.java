@@ -38,6 +38,7 @@ import net.minecraft.resources.ResourceLocation;
  * @param code           对外车次号前缀（"G" / "S3" / "YARD"），PIS 用
  * @param line           线路名（可为 {@code null}，调车作业通常没有线路）
  * @param signalSystemId 本交路使用的信号制度（必须是已注册的 {@code SignalSystem}）
+ * @param speedClassId   本交路的速度等级；{@code null} 表示不限制（由 ATO 按授权自行决定）
  * @param priority       调度优先级提示，数值越小越优先
  */
 public record Service(
@@ -45,6 +46,7 @@ public record Service(
     Component code,
     @Nullable Component line,
     ResourceLocation signalSystemId,
+    @Nullable ResourceLocation speedClassId,
     int priority
 ) {
 
@@ -52,6 +54,13 @@ public record Service(
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(code, "code");
         Objects.requireNonNull(signalSystemId, "signalSystemId");
+    }
+
+    /** 本交路的速度等级；未注册或未设置为空。 */
+    public java.util.Optional<top.hibermod.ctdapi.traction.Traction.SpeedClass> speedClass() {
+        return speedClassId == null
+            ? java.util.Optional.empty()
+            : top.hibermod.ctdapi.traction.Traction.speedClass(speedClassId);
     }
 
     public static Builder builder(ResourceLocation id) {
@@ -64,6 +73,7 @@ public record Service(
         private Component code;
         private Component line;
         private ResourceLocation signalSystemId;
+        private ResourceLocation speedClassId;
         private int priority = 100;
 
         private Builder(ResourceLocation id) {
@@ -77,6 +87,17 @@ public record Service(
 
         public Builder code(Component code) {
             this.code = code;
+            return this;
+        }
+
+        /** 速度等级（车次等级）。 */
+        public Builder speedClass(top.hibermod.ctdapi.traction.Traction.SpeedClass speedClass) {
+            this.speedClassId = speedClass == null ? null : speedClass.id();
+            return this;
+        }
+
+        public Builder speedClass(ResourceLocation speedClassId) {
+            this.speedClassId = speedClassId;
             return this;
         }
 
@@ -98,7 +119,7 @@ public record Service(
         public Service build() {
             Objects.requireNonNull(code, "code");
             Objects.requireNonNull(signalSystemId, "signalSystemId");
-            return new Service(id, code, line, signalSystemId, priority);
+            return new Service(id, code, line, signalSystemId, speedClassId, priority);
         }
     }
 
@@ -147,6 +168,11 @@ public record Service(
             if (top.hibermod.ctdapi.signal.SignalRegistries.system(s.signalSystemId()).isEmpty()) {
                 problems.append("\n  - service ").append(s.id())
                     .append(" uses unknown signal system ").append(s.signalSystemId());
+            }
+            if (s.speedClassId() != null
+                && top.hibermod.ctdapi.traction.Traction.speedClass(s.speedClassId()).isEmpty()) {
+                problems.append("\n  - service ").append(s.id())
+                    .append(" uses unknown speed class ").append(s.speedClassId());
             }
         }
         if (problems.length() > 0) {

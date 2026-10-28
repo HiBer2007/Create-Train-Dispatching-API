@@ -105,6 +105,9 @@ top.hibermod.ctdapi
 ├── Rail                    稳定标识（NodeId / EdgeId / Span）
 ├── ApiCatalog              ★ 统一索引（有哪些、该用哪个）
 ├── signal/                 信号系统
+├── ato/                    ATO 引擎（绑定信号制度）
+├── traction/               牵引方式 / 速度等级 / 燃料 / 供电
+├── status/                 临时限制与应急
 ├── device/                 设备（地面 / 车载）
 ├── timetable/              交路（时刻表对外可见的那一层）
 ├── hud/                    驾驶台 / 调度台面板
@@ -517,7 +520,7 @@ env.markStateDirty();
 **统一冻结**：
 
 ```java
-ApiCatalog.freezeAll();   // 内部顺序：信号 → 交路 → 设备 → HUD → PIS
+ApiCatalog.freezeAll();   // 内部顺序：信号 → ATO → 牵引 → 交路 → 设备 → HUD → PIS
 ApiCatalog.allFrozen();   // 自检
 ApiCatalog.entries();     // 打印全部已注册项
 ```

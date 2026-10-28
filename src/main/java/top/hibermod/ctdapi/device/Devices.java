@@ -57,23 +57,38 @@ public final class Devices {
      * @param kind          地面 / 车载
      * @param capabilities  能力标签（自由定义，建议用短横线命名）。见 {@link Capabilities}
      * @param commandable   是否接受调度指令（否则只能只读上报）
+     * @param signalSystems 车载设备能操作哪些信号制度。地面设备留空。
+     *                      <b>一列车能支持几套信号系统，取决于它装了哪些车载设备。</b>
      */
     public record DeviceType(
         ResourceLocation id,
         Component displayName,
         Kind kind,
         Set<String> capabilities,
-        boolean commandable
+        boolean commandable,
+        Set<ResourceLocation> signalSystems
     ) {
         public DeviceType {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(displayName, "displayName");
             Objects.requireNonNull(kind, "kind");
             capabilities = Set.copyOf(capabilities);
+            signalSystems = signalSystems == null ? Set.of() : Set.copyOf(signalSystems);
+        }
+
+        /** 不带信号系统能力的便捷构造（多数地面设备用这个）。 */
+        public DeviceType(ResourceLocation id, Component displayName, Kind kind,
+                          Set<String> capabilities, boolean commandable) {
+            this(id, displayName, kind, capabilities, commandable, Set.of());
         }
 
         public boolean has(String capability) {
             return capabilities.contains(capability);
+        }
+
+        /** 本设备能否操作某套信号制度。 */
+        public boolean operates(ResourceLocation signalSystemId) {
+            return signalSystems.contains(signalSystemId);
         }
     }
 
@@ -147,6 +162,18 @@ public final class Devices {
         public static final String CAB_DISPLAY = "cab-display";
         public static final String RADIO = "radio";
         public static final String ODOMETER = "odometer";
+        /** 信号系统车载设备：谁能「听懂」哪套信号制度（配 {@link DeviceType#signalSystems()}）。 */
+        public static final String SIGNAL_EQUIPMENT = "signal-equipment";
+        /** 受电弓。 */
+        public static final String PANTOGRAPH = "pantograph";
+
+        // 补给设施（地面）
+        /** 燃料加注口。 */
+        public static final String FUEL_PORT = "fuel-port";
+        /** 充电桩 / 供电轨段。 */
+        public static final String CHARGER = "charger";
+        /** 上水口。 */
+        public static final String WATER_PORT = "water-port";
     }
 
     // ── 注册表 ────────────────────────────────────────────────────────────

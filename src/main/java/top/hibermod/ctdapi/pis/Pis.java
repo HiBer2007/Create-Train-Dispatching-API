@@ -106,7 +106,8 @@ public final class Pis {
         @Nullable Component platform,
         Status status,
         @Nullable Component note,
-        Urgency urgency
+        Urgency urgency,
+        @Nullable ResourceLocation signalSystemId
     ) {
         public BoardEntry {
             Objects.requireNonNull(serviceCode, "serviceCode");
@@ -114,6 +115,20 @@ public final class Pis {
             status = status == null ? Status.ON_TIME : status;
             urgency = urgency == null ? Urgency.NORMAL : urgency;
             via = via == null ? List.of() : List.copyOf(via);
+        }
+
+        /**
+         * 不带来源系统的便捷构造（老代码可用）。
+         *
+         * <p>但**正点率与晚点预计是信号系统的 PIS 引擎算出来的**，渲染方需要知道
+         * 这条预计来自哪套制度，所以在能标注时请用完整构造器。
+         */
+        public BoardEntry(String serviceCode, @Nullable Component line, Component destination,
+                          List<Component> via, int scheduledTicks, int etaTicks, int delayTicks,
+                          @Nullable Component platform, Status status, @Nullable Component note,
+                          Urgency urgency) {
+            this(serviceCode, line, destination, via, scheduledTicks, etaTicks, delayTicks,
+                platform, status, note, urgency, null);
         }
 
         /** 是否可显示具体分钟数（两头都未知时只能显示「—」）。 */
