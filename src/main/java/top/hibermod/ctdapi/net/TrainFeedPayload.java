@@ -41,7 +41,17 @@ public record TrainFeedPayload(List<Entry> trains) implements CustomPacketPayloa
      * @param gameTime    采样时刻
      */
     public record Entry(UUID trainId, double speed, double targetSpeed,
-                        boolean autopilot, long gameTime) {}
+                        boolean autopilot, long gameTime,
+                        double authoritySpeed, double authorityDistance) {
+
+        /** 内核没有下发过授权时的允许速度。 */
+        public static final double NO_AUTHORITY = -1.0;
+
+        /** 内核给过允许速度吗。 */
+        public boolean hasAuthority() {
+            return authoritySpeed >= 0;
+        }
+    }
 
     public static final CustomPacketPayload.Type<TrainFeedPayload> TYPE =
         new CustomPacketPayload.Type<>(
@@ -67,6 +77,8 @@ public record TrainFeedPayload(List<Entry> trains) implements CustomPacketPayloa
             buf.writeDouble(e.targetSpeed());
             buf.writeBoolean(e.autopilot());
             buf.writeVarLong(e.gameTime());
+            buf.writeDouble(e.authoritySpeed());
+            buf.writeDouble(e.authorityDistance());
         }
     }
 
@@ -75,7 +87,7 @@ public record TrainFeedPayload(List<Entry> trains) implements CustomPacketPayloa
         List<Entry> list = new ArrayList<>(Math.min(n, 256));
         for (int i = 0; i < n; i++) {
             list.add(new Entry(buf.readUUID(), buf.readDouble(), buf.readDouble(),
-                buf.readBoolean(), buf.readVarLong()));
+                buf.readBoolean(), buf.readVarLong(), buf.readDouble(), buf.readDouble()));
         }
         return new TrainFeedPayload(list);
     }

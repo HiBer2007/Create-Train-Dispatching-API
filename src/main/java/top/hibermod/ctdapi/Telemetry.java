@@ -56,6 +56,8 @@ public interface Telemetry {
         double targetSpeed,
         double acceleration,
         double maxSpeed,
+    /** 当前弯道的限速（blocks/tick）；直线段上等于 {@code maxSpeed}。 */
+    double maxTurnSpeed,
         int carriages,
         boolean doubleEnded,
         boolean manuallyDriven,
