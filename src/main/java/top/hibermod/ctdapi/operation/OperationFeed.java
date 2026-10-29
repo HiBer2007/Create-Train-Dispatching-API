@@ -76,6 +76,13 @@ public final class OperationFeed {
 
         /** 脚本发出了一条铁路事件。 */
         default void onRailwayEvent(RailwayEvent event) {}
+
+        /**
+         * 列车与车站的相位变化（接近 / 停稳 / 离站）。
+         *
+         * <p>只报变化，不每帧刷：广播按站播，不按 tick 播。
+         */
+        default void onTrainAtStation(TrainAtStation event) {}
     }
 
     private static final List<Listener> LISTENERS = new CopyOnWriteArrayList<>();
@@ -146,6 +153,11 @@ public final class OperationFeed {
 
     public static void railwayEvent(RailwayEvent e) {
         fire(l -> l.onRailwayEvent(e));
+    }
+
+    /** 列车与车站的相位变化。 */
+    public static void trainAtStation(TrainAtStation event) {
+        fire(l -> l.onTrainAtStation(event));
     }
 
     public static void emergencyCleared(Emergency.Order o) {
