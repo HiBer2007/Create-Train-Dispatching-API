@@ -166,6 +166,17 @@ public final class Interop {
         frozen = true;
     }
 
+    /** 解冻（仅供热重载）。之后再 freeze()。 */
+    public static void unfreeze() {
+        frozen = false;
+    }
+
+    /** 注销一个提供方；热重载时用来撤掉脚本注册的那些。 */
+    public static boolean removeEnergyProvider(ResourceLocation id) {
+        if (id == null) return false;
+        return PROVIDERS.remove(id) != null;
+    }
+
     public static void resetForTests() {
         PROVIDERS.clear();
         TARGETS.clear();

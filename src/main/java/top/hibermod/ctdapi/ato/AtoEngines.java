@@ -115,6 +115,18 @@ public final class AtoEngines {
         return AtoEngine.Availability.ok();
     }
 
+    /**
+     * 解冻（**仅供热重载**）。
+     *
+     * <p>没有它，第二次重载必然失败：第一次冻结之后注册表再也不接受注册，
+     * 而重载必须重新注册一遍脚本里的 ATO。症状是「第一次重载好用，
+     * 第二次起脚本全部加载失败」——只有连着做两次才会露出来。
+     *
+     * <p>调用方必须在之后重新 {@link #freeze()}，否则校验会被绕过。
+     */
+    public static void unfreeze() {
+        frozen = false;
+    }
     public static boolean frozen() {
         return frozen;
     }
