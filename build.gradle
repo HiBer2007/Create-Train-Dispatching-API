@@ -131,6 +131,12 @@ publishing {
     }
 }
 
+tasks.register('deviceRegistryTest', JavaExec) {
+    group = 'verification'
+    description = '设备注册表：重复/冻结/移除/筛选/位置约束'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'top.hibermod.ctdapi.tools.DeviceRegistryTest'
+}
 tasks.register('statusInteropTest', JavaExec) {
     group = 'verification'
     description = 'API 不变量：未知≠耗尽 / 授权哨兵 / 灯态读写'
