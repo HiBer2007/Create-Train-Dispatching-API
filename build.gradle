@@ -131,6 +131,12 @@ publishing {
     }
 }
 
+tasks.register('timetableSignalRegistryTest', JavaExec) {
+    group = 'verification'
+    description = '制度/交路注册表规矩（停车语义、制度指向、冻结校验）'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'top.hibermod.ctdapi.tools.TimetableSignalRegistryTest'
+}
 tasks.register('deviceRegistryTest', JavaExec) {
     group = 'verification'
     description = '设备注册表：重复/冻结/移除/筛选/位置约束'
