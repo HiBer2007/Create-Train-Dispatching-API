@@ -34,6 +34,18 @@ public interface DispatchFrame {
     /** 提交一条补给指令（加油 / 充电 / 上水）。 */
     void service(Command.ServiceCommand command);
 
+    /**
+     * 为某列车申请一条进路。
+     *
+     * <p>授权只回答「还能走多远」，进路回答「走哪条」。没有进路时，
+     * 授权再大也只能沿当前方向前进；分叉口该走哪股必需由进路指定。
+     *
+     * <p>宿主按申请顺序分配 {@code RouteId}，并在
+     * {@link Telemetry.TrainState#route()} 里回传已锁区段与剩余长度。
+     */
+    default void route(UUID trainId, Command.RouteRequest request) {}
+
+
     /** 发布/更新一块 HUD 面板的本帧内容。不发布 = 该面板隐藏。 */
     void hud(Hud.HudPanel panel);
 
