@@ -131,6 +131,12 @@ publishing {
     }
 }
 
+tasks.register('statusInteropTest', JavaExec) {
+    group = 'verification'
+    description = 'API 不变量：未知≠耗尽 / 授权哨兵 / 灯态读写'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'top.hibermod.ctdapi.tools.StatusInteropTest'
+}
 tasks.register('assignmentsTest', JavaExec) {
     group = 'verification'
     description = '改派语义回归：把最后一辆车摘走时旧指派应当整个撤掉'
