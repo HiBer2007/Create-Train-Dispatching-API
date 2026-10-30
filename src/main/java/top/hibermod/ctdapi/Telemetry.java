@@ -81,6 +81,22 @@ public interface Telemetry {
         public boolean overshoots(double distance) {
             return stoppingDistance(Math.abs(speed), acceleration) > distance;
         }
+
+        /**
+         * 换一份能源样本，其余不变。
+         *
+         * <p>能源采样要拿 {@code TrainState} 去问联动方，而那时状态正在构造中。
+         * 先构造一份「能源未知」的，问完再把结果换进去——
+         * 这比给采样器加五个参数干净，也不必让遥测签名知道 interop 的存在。
+         */
+        public TrainState withEnergy(
+                top.hibermod.ctdapi.interop.EnergyProvider.EnergySample newEnergy) {
+            return new TrainState(
+                id, name, length, leadingEdge, leadingDistance, trailingEdge, trailingDistance,
+                footprint, speed, targetSpeed, acceleration, maxSpeed, maxTurnSpeed,
+                carriages, doubleEnded, manuallyDriven, derailed, odometer, route,
+                authority, newEnergy, signalSystems);
+        }
     }
 
     /**
