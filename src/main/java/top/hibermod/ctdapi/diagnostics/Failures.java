@@ -44,7 +44,24 @@ public final class Failures {
      * @param where 位置标识（例如 {@code "Train#tick 注入"}），同时作为计数键
      * @param t     原始异常；允许 {@code null}（有些地方只有失败没有异常）
      */
+    /**
+     * 抑制计数。自检要**故意触发**守卫，而那些守卫会调用 {@link #caught}——
+     * 于是一次自检就把 {@code swallowed} 弄脏了，验收从此永远红。
+     * 自检不该污染它正在检查的通道，所以在验证窗口里静音。
+     */
+    private static int suppressionDepth;
+
+    /** 在验证窗口内静音（成对使用；异常也要 end）。 */
+    public static void beginSuppression() {
+        suppressionDepth++;
+    }
+
+    public static void endSuppression() {
+        if (suppressionDepth > 0) suppressionDepth--;
+    }
+
     public static void caught(String where, Throwable t) {
+        if (suppressionDepth > 0) return;
         if (where == null) where = "(unlabeled)";
 
         AtomicLong counter = COUNTS.computeIfAbsent(where, k -> new AtomicLong());
